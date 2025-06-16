@@ -1,0 +1,83 @@
+{
+  // ==================================================================================== //
+  //               CONFIGURATION FILE FOR pySISSO (with Advanced Features)                //
+  // ==================================================================================== //
+
+  // =================================================================== //
+  //                       DATA & I/O SETTINGS                           //
+  // =================================================================== //
+  
+  "data_file":               "SISSO_Sample_Dataset.csv",
+  "property_key":            "Target_U (eV)",
+  "non_feature_cols":        [],
+  "workdir":                 "sisso_results_advanced_test",
+
+
+  // =================================================================== //
+  //          FEATURE-SPACE CONSTRUCTION (with Advanced Rules)           //
+  // =================================================================== //
+
+  // [NEW] Use "interaction_only" to build features only from combinations
+  // of primary features (e.g., f1*f2), skipping unary transforms (e.g., sqrt(f1)).
+  "interaction_only":        false,
+
+  // [NEW] "op_rules" replaces "opset" for fine-grained control.
+  // This is backward-compatible; if you provide an "opset", it will be converted.
+  "op_rules": [
+    // Standard operators
+    {"op": "add"}, {"op": "sub"}, {"op": "mul"}, {"op": "div"},
+    {"op": "sq"}, {"op": "cb"}, {"op": "inv"}, {"op": "abs"},
+    // Operator with a constraint: 'sqrt' will not be applied to 'Lattice_Constant_A (Å)'
+    {"op": "sqrt", "exclude_features": ["Lattice_Constant_A (Å)"]},
+    // Enable a user-defined custom operator (defined in features.py)
+    {"op": "log1p"}
+  ],
+
+  "max_rung":                2,
+
+  // =================================================================== //
+  //           PRIMARY FEATURE UNITS (for Dimensionality Checks)         //
+  // =================================================================== //
+  
+  "primary_units": {
+    "Activation_Energy (eV)": "electron_volt",
+    "OCV (V)": "volt",
+    "Lattice_Constant_A (Å)": "angstrom"
+  },
+
+
+  // =================================================================== //
+  //                   SEARCH & SELECTION STRATEGY                       //
+  // =================================================================== //
+  
+  "desc_dim":                3,
+  "sis_sizes":               [50, 25],
+  "max_feat_cross_correlation": 0.95,
+  "search_strategy":         "greedy",
+
+
+  // =================================================================== //
+  //                 MODEL CONSTRUCTION & OPTIMIZATION                   //
+  // =================================================================== //
+  
+  "calc_type":               "regression",
+  "alpha":                   1e-5,
+
+
+  // =================================================================== //
+  //            MODEL SELECTION (Cross-Validation or Bootstrap)          //
+  // =================================================================== //
+  
+  "selection_method":        "cv",
+  "cv":                      -1,
+  "n_bootstrap":             50,
+  "cv_score_tolerance":      0.02,
+  
+
+  // =================================================================== //
+  //                       OUTPUT & COMPUTATIONAL                        //
+  // =================================================================== //
+
+  "num_cpu_threads":         -1,
+  "random_state":            10
+}

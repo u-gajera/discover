@@ -1,0 +1,12 @@
+numpy
+pandas
+scikit-learn
+sympy
+scipy
+joblib
+matplotlib
+seaborn
+pint
+# For optional GPU support, install the appropriate version:
+# cupy-cuda11x
+# torch
