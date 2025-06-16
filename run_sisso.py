@@ -7,18 +7,20 @@
 This script serves as the main entry point for running pySISSO. It is designed
 to be generic and controlled entirely by a configuration file.
 
-To run an analysis, execute this script from the command line and pass the
-path to your configuration file as an argument:
+HOW TO RUN:
 
-    python run_new_analysis.py your_config.json
+1. With your own configuration file:
+   ---------------------------------
+   Create a config.json file and run:
+   python run_sisso.py your_config.json
 
-The script will automatically handle:
-  - Loading and parsing the configuration (including advanced rules).
-  - Preprocessing the data.
-  - Selecting and initializing the correct SISSO model.
-  - Running the complete SISSO workflow.
-  - Printing a final summary report, including a LaTeX formula.
-  - Saving all detailed outputs and new interpretation plots.
+2. As a self-contained demo (no arguments needed):
+   ----------------------------------------------
+   Run the script without any arguments:
+   python run_sisso.py
+
+   This will create 'demo_data.csv' and 'demo_config.json' (if they don't exist)
+   and run a sample analysis using the robust OMP solver.
 
 """
 import pandas as pd
@@ -27,11 +29,11 @@ import argparse
 import shutil
 from pathlib import Path
 import sys
-import os
+import numpy as np
 
-# Add the 'src' directory to the Python path to allow importing the pysisso package
-# This assumes the script is in the parent directory of 'src/'
-sys.path.append(str(Path(__file__).parent / 'src'))
+# This setup assumes the script is run from the project directory
+# and the package is in `src/pysisso`.
+sys.path.insert(0, str(Path(__file__).parent / 'src'))
 
 from pysisso import (
     SISSORegressor,
@@ -40,20 +42,18 @@ from pysisso import (
     SISSOCHClassifier
 )
 
-def main():
-    """Handles the Command Line Interface execution."""
-    parser = argparse.ArgumentParser(
-        description="Python-native Sure Independence Screening and Sparsifying Operator (pySISSO)",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter
-    )
-    parser.add_argument('config_file', type=str, help="Path to the JSON configuration file.")
-    args = parser.parse_args()
-
+def run_analysis(config_path):
+    """Core logic to run SISSO based on a config file."""
     # --- 1. Load Configuration ---
-    print(f"--- Loading configuration from '{args.config_file}' ---")
-    with open(args.config_file, 'r') as f:
-        lines = [line for line in f if not line.strip().startswith('//')]
-        config = json.loads("".join(lines))
+    print(f"--- Loading configuration from '{config_path}' ---")
+    try:
+        with open(config_path, 'r') as f:
+            # Strip comments (lines starting with //) before parsing JSON
+            lines = [line for line in f if not line.strip().startswith('//')]
+            config = json.loads("".join(lines))
+    except (json.JSONDecodeError, FileNotFoundError) as e:
+        print(f"Error reading or parsing config file '{config_path}': {e}")
+        return
 
     # --- 2. Prepare Directories ---
     workdir = config.get('workdir', 'sisso_output')
@@ -77,16 +77,19 @@ def main():
     
     # --- 4. Define Target and Features based on Config ---
     prop_key = config.get('property_key')
-    if not prop_key:
-        raise ValueError("Config must contain 'property_key'.")
+    if not prop_key or prop_key not in data.columns:
+        raise ValueError(f"Config 'property_key' '{prop_key}' not found in data columns.")
     
     non_feature_cols = config.get('non_feature_cols', [])
     
     y = data[prop_key]
-    X_raw = data.drop(columns=[prop_key] + non_feature_cols)
+    feature_cols = [c for c in data.columns if c not in [prop_key] + non_feature_cols]
+    X_raw = data[feature_cols]
+    
+    # One-hot encode categorical features (if any)
     X = pd.get_dummies(X_raw, dummy_na=False, drop_first=False)
     if X.shape[1] > X_raw.shape[1]:
-        print(f"--- Performed one-hot encoding. Feature set expanded to {X.shape[1]} features. ---")
+        print(f"--- Performed one-hot encoding. Feature set expanded from {X_raw.shape[1]} to {X.shape[1]} features. ---")
 
     print(f"\nTarget property: '{prop_key}'")
     print(f"Final primary features ({len(X.columns)}) being used for this run:\n  {', '.join(X.columns)}")
@@ -98,6 +101,7 @@ def main():
         'ch_classification': SISSOCHClassifier, 'convex_hull': SISSOCHClassifier,
         'classification': SISSOClassifier,
     }
+    # Use 'task_type' or the legacy 'calc_type' key for backward compatibility
     task_key = config.get('task_type', config.get('calc_type', 'regression')).lower()
     SissoClass = task_map.get(task_key)
     if SissoClass is None:
@@ -105,13 +109,18 @@ def main():
 
     print("\n--- Initializing and running SISSO ---")
     sisso = SissoClass(**config)
-    sisso.fit(X, y)
+    
+    try:
+        sisso.fit(X, y)
+    except (ImportError, ValueError, RuntimeError) as e:
+        print(f"\nFATAL ERROR during SISSO fit: {e}")
+        print("Please check your configuration and dependencies (e.g., gurobipy for MIQP).")
+        return
 
-    # --- 6. Print Final Summary and Demonstrate New Features ---
+    # --- 6. Print Final Summary ---
     print("\n" + "="*25 + " FINAL MODEL REPORT " + "="*25)
     print(sisso.summary_report(X, y, sample_weight=None))
 
-    # --- NEW: DEMONSTRATE LATEX OUTPUT ---
     print("\n" + "="*25 + " LATEX FORMULA " + "="*25)
     try:
         latex_formula = sisso.best_model_latex(target_name="P")
@@ -120,16 +129,61 @@ def main():
     except Exception as e:
         print(f"Could not generate LaTeX formula: {e}")
     
-    print("\n" + "="*68)
-    print(f"\nAnalysis complete. All detailed results, models, and plots are saved in '{workdir}'.")
-    print("New interpretation plots like 'feature_importance.png' and 'partial_dependence.png' are now available in the plots subdirectory.")
+    print("\n" + "="*70)
+    print(f"\nAnalysis complete. All detailed results and plots are saved in '{workdir}'.")
+
+
+def create_demo_files():
+    """Creates a sample dataset and config file for demonstration."""
+    print("--- Creating demo files (demo_config.json, demo_data.csv) ---")
+    
+    # Use the provided SISSO_Sample_Dataset.csv if it exists, otherwise create a dummy
+    sample_data_path = Path("SISSO_Sample_Dataset.csv")
+    demo_data_path = Path("demo_data.csv")
+    if sample_data_path.exists():
+        data_to_use = sample_data_path
+        property_to_use = "Target_U (eV)"
+    else:
+        np.random.seed(42)
+        f1 = np.random.rand(100) * 10
+        f2 = np.random.rand(100) * 5 + 2
+        y = 2.5 * (f1 / f2) + 5 + np.random.randn(100) * 0.5
+        df = pd.DataFrame({'feature1': f1, 'feature2': f2, 'target_property': y})
+        df.to_csv(demo_data_path, index=False)
+        data_to_use = demo_data_path
+        property_to_use = "target_property"
+    
+    # Create a corresponding demo config file
+    demo_config = {
+        "data_file": str(data_to_use),
+        "property_key": property_to_use,
+        "workdir": "sisso_demo_omp_output",
+        "depth": 2,
+        "max_D": 2,
+        "sis_sizes": [50],
+        "search_strategy": "omp", 
+        "task_type": "regression",
+        "selection_method": "cv",
+        "cv": 5,
+        "n_jobs": -1,
+        "random_state": 42
+    }
+    with open('demo_config.json', 'w') as f:
+        json.dump(demo_config, f, indent=2)
+    return 'demo_config.json'
 
 
 if __name__ == '__main__':
-    # This setup allows running from CLI with a config file
-    # or running a built-in demo if no args are given.
-    if len(sys.argv) > 1:
-        main()
+    parser = argparse.ArgumentParser(
+        description="Python-native Sure Independence Screening and Sparsifying Operator (pySISSO)",
+        formatter_class=argparse.RawTextHelpFormatter
+    )
+    parser.add_argument('config_file', nargs='?', default=None, help="Path to the JSON configuration file.\nIf not provided, a demo will be run.")
+    args = parser.parse_args()
+
+    if args.config_file:
+        run_analysis(args.config_file)
     else:
-        print("Usage: python run_new_analysis.py <path_to_config.json>")
-        print("\nPlease provide a configuration file to run an analysis.")
+        print("No config file provided. Running a demonstration.")
+        config_to_run = create_demo_files()
+        run_analysis(config_to_run)

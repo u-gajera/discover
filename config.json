@@ -1,44 +1,63 @@
 {
-  // ==================================================================================== //
-  //               CONFIGURATION FILE FOR pySISSO (with Advanced Features)                //
-  // ==================================================================================== //
+  "//": "====================================================================================",
+  "//": "         DEFINITIVE MASTER CONFIGURATION FILE for pySISSO (All Parameters)          ",
+  "//": "====================================================================================",
 
-  // =================================================================== //
-  //                       DATA & I/O SETTINGS                           //
-  // =================================================================== //
+  "//": "===================================================================",
+  "//": "                       1. DATA & I/O SETTINGS                        ",
+  "//": "===================================================================",
   
+  "//": "Path to your input data file (CSV format).",
   "data_file":               "SISSO_Sample_Dataset.csv",
+  
+  "//": "The exact column name of the target property you want to predict.",
   "property_key":            "Target_U (eV)",
+  
+  "//": "List of columns to ignore (e.g., sample IDs, text labels). They will not be used as features.",
   "non_feature_cols":        [],
-  "workdir":                 "sisso_results_advanced_test",
+  
+  "//": "Name of the output directory where all results, models, and plots will be saved.",
+  "workdir":                 "sisso_master_run",
+  
+  "//": "If true, saves the full generated feature space (phi-space) as a compressed CSV.",
+  "//": "WARNING: This file can be very large.",
+  "save_feature_space":      false,
+  
+  "//": "If true, the generated feature space is cached in the workdir.",
+  "//": "This dramatically speeds up subsequent runs with identical feature generation settings.",
+  "use_cache":               true,
 
 
-  // =================================================================== //
-  //          FEATURE-SPACE CONSTRUCTION (with Advanced Rules)           //
-  // =================================================================== //
+  "//": "===================================================================",
+  "//": "                  2. FEATURE-SPACE CONSTRUCTION                    ",
+  "//": "===================================================================",
 
-  // [NEW] Use "interaction_only" to build features only from combinations
-  // of primary features (e.g., f1*f2), skipping unary transforms (e.g., sqrt(f1)).
+  "//": "Recursion depth for creating new features. (Legacy key: 'max_rung')",
+  "//": "Effect: Higher values create more complex features but exponentially increase computation time.",
+  "depth":                   2,
+
+  "//": "List of mathematical operators. The modern way is 'op_rules', but legacy 'opset' is supported.",
+  "//": "Available ops: add, sub, mul, div, sq, cb, sqrt, cbrt, inv, abs, sign, exp, exp-, log, sin, cos.",
+  "//": "You can add constraints, e.g., {\"op\": \"sqrt\", \"exclude_features\": [\"Feature_A\"]}",
+  "op_rules": [
+    {"op": "add"}, {"op": "sub"}, {"op": "mul"}
+  ],
+  
+  "//": "[ADVANCED] List of special parametric operators to refine with non-linear optimization.",
+  "//": "Currently supported: 'exp-'. An operator listed here must also be in 'op_rules'.",
+  "parametric_ops":          [],
+  
+  "//": "[ADVANCED] If true, only combines different primary features (f1*f2), skipping unary transforms (sqrt(f1)).",
   "interaction_only":        false,
 
-  // [NEW] "op_rules" replaces "opset" for fine-grained control.
-  // This is backward-compatible; if you provide an "opset", it will be converted.
-  "op_rules": [
-    // Standard operators
-    {"op": "add"}, {"op": "sub"}, {"op": "mul"}, {"op": "div"},
-    {"op": "sq"}, {"op": "cb"}, {"op": "inv"}, {"op": "abs"},
-    // Operator with a constraint: 'sqrt' will not be applied to 'Lattice_Constant_A (Å)'
-    {"op": "sqrt", "exclude_features": ["Lattice_Constant_A (Å)"]},
-    // Enable a user-defined custom operator (defined in features.py)
-    {"op": "log1p"}
-  ],
+  "//": "Lower bound for the absolute value of any generated feature. Helps prevent underflow or near-zero features.",
+  "min_abs_feat_val":        1e-50,
 
-  "max_rung":                2,
+  "//": "Upper bound for the absolute value of any generated feature. Helps prevent overflow (e.g., from `exp`).",
+  "max_abs_feat_val":        1e+50,
 
-  // =================================================================== //
-  //           PRIMARY FEATURE UNITS (for Dimensionality Checks)         //
-  // =================================================================== //
-  
+  "//": "Optional. Maps feature names to `pint`-compatible unit strings to prevent nonsensical operations.",
+  "//": "Requires the 'pint' package to be installed.",
   "primary_units": {
     "Activation_Energy (eV)": "electron_volt",
     "OCV (V)": "volt",
@@ -46,38 +65,94 @@
   },
 
 
-  // =================================================================== //
-  //                   SEARCH & SELECTION STRATEGY                       //
-  // =================================================================== //
+  "//": "===================================================================",
+  "//": "                   3. SEARCH & SELECTION STRATEGY                    ",
+  "//": "===================================================================",
   
-  "desc_dim":                3,
-  "sis_sizes":               [50, 25],
+  "//": "Maximum dimension (number of features) of the final model. (Legacy key: 'desc_dim')",
+  "max_D":                   3,
+  
+  "//": "A list of subspace sizes for Sure Independence Screening (SIS). (Legacy key: 'n_sis_select' or 'top_k')",
+  "//": "Running multiple sizes provides robustness. The code will attempt a run for each size in the list.",
+  "sis_sizes":               [100, 50],
+
+  "//": "The core search algorithm.",
+  "//": "Choices: 'greedy', 'sisso++', 'omp', 'miqp', 'brute_force'.",
+  "search_strategy":         "omp",
+  
+  "//": "Prunes highly correlated features before search to improve stability.",
   "max_feat_cross_correlation": 0.95,
-  "search_strategy":         "greedy",
+
+  "//": "For 'sisso++' only. Factor to shrink the search beam at each dimension (e.g., 0.8).",
+  "//": "Value of 1.0 (default) keeps the beam size constant. < 1.0 speeds up search for higher D.",
+  "beam_width_decay":        1.0,
+
+  "//": "Max iterations for non-linear refinement if 'parametric_ops' are used.",
+  "nlopt_max_iter":          100,
 
 
-  // =================================================================== //
-  //                 MODEL CONSTRUCTION & OPTIMIZATION                   //
-  // =================================================================== //
+  "//": "===================================================================",
+  "//": "                 4. MODEL CONSTRUCTION & VALIDATION                  ",
+  "//": "===================================================================",
   
-  "calc_type":               "regression",
+  "//": "The machine learning task. (Legacy key: 'calc_type')",
+  "//": "Choices: 'regression', 'multitask', 'classification_svm', 'classification_logreg', 'ch_classification'.",
+  "task_type":               "multitask",
+
+  "//": "--- Multi-Task-Specific Parameter ---",
+  "//": "This parameter is ONLY used if 'task_type' is 'multitask'.",
+  "//": "Choices: 'average' (default) or 'cca' (advanced).",
+  "multitask_sis_method":    "cca", 
+  
+  "//": "For regression: the loss function. 'l2' (Ridge) or 'huber' (robust to outliers).",
+  "loss":                    "l2",
+  
+  "//": "Regularization strength for Ridge ('l2') or Huber regression.",
   "alpha":                   1e-5,
-
-
-  // =================================================================== //
-  //            MODEL SELECTION (Cross-Validation or Bootstrap)          //
-  // =================================================================== //
   
-  "selection_method":        "cv",
+  "//": "The 'C' regularization parameter for 'classification_svm'. Inverse of regularization strength.",
+  "C_svm":                   1.0,
+  
+  "//": "The 'C' regularization parameter for 'classification_logreg'. Inverse of regularization strength.",
+  "C_logreg":                1.0,
+  
+  "//": "Method to select the best dimension D: 'cv' (Cross-Validation) or 'bootstrap' or 'aic' or 'bic'.",
+  "selection_method":        "bic",
+  
+  "//": "Number of folds for K-Fold CV. Use -1 for Leave-One-Out CV (LOOCV).",
   "cv":                      -1,
-  "n_bootstrap":             50,
-  "cv_score_tolerance":      0.02,
   
+  "//": "Number of bootstrap samples if selection_method is 'bootstrap'.",
+  "n_bootstrap":             50,
+  
+  "//": "Selects the simplest model whose CV score is within this fractional tolerance of the best score.",
+  "cv_score_tolerance":      0.02,
 
-  // =================================================================== //
-  //                       OUTPUT & COMPUTATIONAL                        //
-  // =================================================================== //
+  "//": "A more complex model is only selected if its score improves by at least this absolute value.",
+  "//": "Useful for noisy data to prevent overfitting. Default is 0.0.",
+  "cv_min_improvement":      0.0,
 
-  "num_cpu_threads":         -1,
-  "random_state":            10
+  "//": "If true, the linear model will not have an intercept term.",
+  "fix_intercept":           false,
+
+
+  "//": "===================================================================",
+  "//": "                       5. COMPUTATIONAL SETTINGS                     ",
+  "//": "===================================================================",
+
+  "//": "Number of CPU cores for parallel tasks. -1 uses all. (Legacy key: 'num_cpu_threads')",
+  "n_jobs":                  -1,
+  
+  "//": "Hardware for acceleration ('cpu', 'cuda', 'mps'). Affects only some parts of the code.",
+  "device":                  "cpu", 
+  
+  "//": "Specifies which GPU to use if device is 'cuda' and you have multiple GPUs.",
+  "gpu_id":                  0,
+
+  "//": "Controls numerical precision. 'float64' (default, safer) or 'float32' (faster, less memory).",
+  "//": "A legacy boolean 'use_single_precision': true is equivalent to 'dtype': 'float32'.",
+  "dtype":                   "float64",
+
+  "//": "Seed for the random number generator to ensure run-to-run reproducibility.",
+  "random_state":            42
 }

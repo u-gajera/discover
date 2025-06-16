@@ -1,6 +1,3 @@
-# --- START OF FILE scoring.py ---
-
-# -*- coding: utf-8 -*-
 """
 This module contains all functions related to model evaluation, screening, and
 cross-validation. It includes:
@@ -18,6 +15,7 @@ from sklearn.svm import SVC
 from sklearn.metrics import mean_squared_error, log_loss
 from sklearn.feature_selection import f_classif
 from scipy.spatial import ConvexHull, qhull
+from sklearn.cross_decomposition import CCA
 
 from .constants import (
     REGRESSION, MULTITASK, CH_CLASSIFICATION, CLASSIFICATION_SVM,
@@ -41,9 +39,10 @@ except ImportError:
 #  Screening and Scoring
 # =============================================================================
 
-def run_SIS(phi_df, y, task_type, xp=np):
+def run_SIS(phi_df, y, task_type, xp=np, multitask_sis_method='average'):
     """
     Performs Sure Independence Screening (SIS) to rank features.
+    For multi-task problems, can use simple 'average' correlation or 'cca'.
     """
     print(f"Running SIS to screen {phi_df.shape[1]} features...")
     if phi_df.empty:
@@ -97,10 +96,31 @@ def run_SIS(phi_df, y, task_type, xp=np):
             correlations = pd.Series(f_values, index=phi_subset.columns).fillna(0).sort_values(ascending=False)
          except ValueError as e:
              warnings.warn(f"SIS f_classif failed: {e}. Returning empty list."); return []
+    
     elif task_type == MULTITASK:
         y_df = y if isinstance(y, pd.DataFrame) else pd.DataFrame(y, index=phi_df.index)
-        avg_correlations = phi_df.apply(lambda feature: y_df.corrwith(feature).abs().mean())
-        correlations = avg_correlations.dropna().sort_values(ascending=False)
+        
+        if multitask_sis_method == 'cca':
+            print("  Using Canonical Correlation Analysis (CCA) for multi-task screening.")
+            cca = CCA(n_components=1)
+            cca_corrs = {}
+            for feature_name in phi_df.columns:
+                try:
+                    # CCA requires 2D input
+                    X_feat = phi_df[[feature_name]].values 
+                    # Fit CCA and get the correlation of the first canonical variables
+                    X_c, y_c = cca.fit_transform(X_feat, y_df.values)
+                    # The correlation is between the first columns of the transformed sets
+                    corr = np.corrcoef(X_c.T, y_c.T)[0, 1]
+                    cca_corrs[feature_name] = np.abs(corr)
+                except np.linalg.LinAlgError:
+                    # This can happen if a feature is constant
+                    cca_corrs[feature_name] = 0.0
+            correlations = pd.Series(cca_corrs).fillna(0).sort_values(ascending=False)
+        else: # Default 'average' method
+            print("  Using average correlation for multi-task screening.")
+            avg_correlations = phi_df.apply(lambda feature: y_df.corrwith(feature).abs().mean())
+            correlations = avg_correlations.dropna().sort_values(ascending=False)
     else:
         raise ValueError(f"task_type '{task_type}' not recognized.")
 

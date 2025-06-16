@@ -26,15 +26,19 @@ from .constants import (
 from .features import generate_features_with_units
 from .features import CUPY_AVAILABLE, MPS_AVAILABLE
 from .scoring import run_SIS, _run_cv, GPUModel
+
+# --- Import all search functions ---
 from .search import (
     _find_best_models_brute_force,
     _find_best_models_greedy,
     _find_best_models_sisso_pp,
     _find_best_models_ch_greedy,
-    _refine_model_with_nlopt
+    _refine_model_with_nlopt,
+    _find_best_models_omp,
+    _find_best_models_miqp
 )
+
 from .utils import save_results, print_descriptor_formula
-# --- NEW: Import new plotting functions ---
 from . import utils as plot_utils
 
 try:
@@ -88,6 +92,7 @@ class SISSOBase(BaseEstimator):
         self.feature_space_df_ = None
         self.feature_space_sym_map_ = None
         self.sym_clean_to_original_map_ = None
+        self.primary_symbols_ = None
         self.models_by_dim_ = {}
         self.cv_results_ = {}
         self.best_descriptor_ = None
@@ -102,38 +107,47 @@ class SISSOBase(BaseEstimator):
     def _parse_config(self, config):
         """
         Parses the configuration dictionary and sets class attributes with defaults.
-        This now handles advanced operator rules and interaction-only mode.
         """
-        calc_type = config.get('calc_type', config.get('task_type', REGRESSION))
-        sis_select = config.get('n_sis_select', config.get('top_k'))
+        valid_selection_methods = ['cv', 'bootstrap', 'aic', 'bic']
+        
+        # Rename legacy keys for backward compatibility
+        if 'task_type' in config: config.setdefault('calc_type', config['task_type'])
+        if 'max_rung' in config: config.setdefault('depth', config['max_rung'])
+        if 'desc_dim' in config: config.setdefault('max_D', config['desc_dim'])
+        if 'top_k' in config: config.setdefault('n_sis_select', config['top_k'])
+        if 'num_cpu_threads' in config: config.setdefault('n_jobs', config['num_cpu_threads'])
+        
+        calc_type = config.get('calc_type', REGRESSION)
+        sis_select = config.get('n_sis_select')
         self._task_type_raw = calc_type
         self.primary_units = config.get('primary_units', {})
-        self.depth = config.get('depth', config.get('max_rung', 2))
+        self.depth = config.get('depth', 2)
 
-        # --- NEW: Advanced operator configuration ---
-        # For backward compatibility, if old 'opset' is used, convert it.
         if 'op_rules' in config:
             self.op_rules = config['op_rules']
         elif 'opset' in config:
             warnings.warn("'opset' is deprecated. Use 'op_rules' for advanced control. Converting for this run.")
             self.op_rules = [{"op": op_name} for op_name in config['opset']]
         else:
-            # Default operator set if neither is provided
             default_opset = ['add', 'sub', 'mul', 'div', 'sq', 'cb', 'sqrt', 'cbrt', 'inv', 'abs']
             self.op_rules = [{"op": op_name} for op_name in default_opset]
         
         self.parametric_ops = config.get('parametric_ops', [])
-        self.interaction_only = config.get('interaction_only', False) # NEW
-        # --- End of new operator config ---
+        self.interaction_only = config.get('interaction_only', False)
 
         self.min_abs_feat_val = config.get('min_abs_feat_val', 1e-50)
         self.max_abs_feat_val = config.get('max_abs_feat_val', 1e+50)
+        
         self.search_strategy = config.get('search_strategy', 'greedy').lower()
-        if self.search_strategy not in ['greedy', 'brute_force', 'sisso++']:
-            raise ValueError("search_strategy must be one of 'greedy', 'brute_force', 'sisso++'")
+        if self.search_strategy not in ['greedy', 'brute_force', 'sisso++', 'omp', 'miqp']:
+            raise ValueError(f"search_strategy must be one of 'greedy', 'brute_force', 'sisso++', 'omp', 'miqp'. Got '{self.search_strategy}'")
+        
+        self.multitask_sis_method = config.get('multitask_sis_method', 'average').lower()
+        if self.multitask_sis_method not in ['average', 'cca']:
+            raise ValueError("`multitask_sis_method` must be 'average' or 'cca'.")
         self.nlopt_max_iter = config.get('nlopt_max_iter', 100)
         self.beam_width_decay = config.get('beam_width_decay', 1.0)
-        self.max_D = config.get('max_D', config.get('desc_dim', 3))
+        self.max_D = config.get('max_D', 3)
         self.sis_sizes = config.get('sis_sizes', [sis_select] if sis_select else [100])
         if not isinstance(self.sis_sizes, list): self.sis_sizes = [self.sis_sizes]
         self.max_feat_cross_correlation = config.get('max_feat_cross_correlation', 0.95)
@@ -143,11 +157,14 @@ class SISSOBase(BaseEstimator):
         self.C_svm = config.get('C_svm', 1.0)
         self.C_logreg = config.get('C_logreg', 1.0)
         self.selection_method = config.get('selection_method', 'cv').lower()
+        if self.selection_method not in valid_selection_methods:
+            raise ValueError(f"selection_method must be one of {valid_selection_methods}")
+            
         self.n_bootstrap = config.get('n_bootstrap', 30)
         self.cv = config.get('cv', 5)
         self.cv_score_tolerance = config.get('cv_score_tolerance', 0.02)
         self.cv_min_improvement = config.get('cv_min_improvement', 0.0)
-        self.n_jobs = config.get('n_jobs', config.get('num_cpu_threads', -1))
+        self.n_jobs = config.get('n_jobs', -1)
         self.device = config.get('device', 'cpu').lower()
         self.gpu_id = config.get('gpu_id', 0)
         self.dtype = 'float32' if config.get('use_single_precision', False) else config.get('dtype', 'float64')
@@ -166,7 +183,9 @@ class SISSOBase(BaseEstimator):
             'primary_units': self.primary_units, 'depth': self.depth, 'op_rules': self.op_rules,
             'parametric_ops': self.parametric_ops, 'interaction_only': self.interaction_only,
             'min_abs_feat_val': self.min_abs_feat_val, 'max_abs_feat_val': self.max_abs_feat_val,
-            'search_strategy': self.search_strategy, 'nlopt_max_iter': self.nlopt_max_iter,
+            'search_strategy': self.search_strategy, 
+            'multitask_sis_method': self.multitask_sis_method, # NEW
+            'nlopt_max_iter': self.nlopt_max_iter,
             'beam_width_decay': self.beam_width_decay, 'max_D': self.max_D, 'sis_sizes': self.sis_sizes,
             'max_feat_cross_correlation': self.max_feat_cross_correlation, 'loss': self.loss,
             'fix_intercept_': self.fix_intercept_, 'alpha': self.alpha, 'C_svm': self.C_svm,
@@ -177,11 +196,9 @@ class SISSOBase(BaseEstimator):
             'save_feature_space': self.save_feature_space, 'use_cache': self.use_cache,
             'random_state': self.random_state, '_task_type_raw': self._task_type_raw
         }
-        # For sklearn compatibility, don't return 'opset' if 'op_rules' was the source
         if 'opset' in self.__dict__:
              params['opset'] = self.opset
         return params
-
 
     def set_params(self, **params):
         """Sets the parameters of this estimator, Scikit-learn compatible."""
@@ -246,6 +263,7 @@ class SISSOBase(BaseEstimator):
             max_abs_feat_val=self.max_abs_feat_val, interaction_only=self.interaction_only,
             xp=self.xp_, dtype=np.dtype(self.dtype), torch_device=self.torch_device_
         )
+        self.primary_symbols_ = list(self.sym_clean_to_original_map_.keys())
         
         self.timing_summary_['Feature Generation'] = time.time() - start_time
         print(f"\nGenerated feature space size: {self.feature_space_df_.shape[1]}")
@@ -256,7 +274,11 @@ class SISSOBase(BaseEstimator):
         if n_select >= phi_df.shape[1]:
             print(f"SIS selection size ({n_select}) >= total features ({phi_df.shape[1]}). Using all features.")
             return phi_df
-        sorted_features = run_SIS(phi_df, y, self.task_type_, xp=self.xp_)
+        sorted_features = run_SIS(
+            phi_df, y, self.task_type_, 
+            xp=self.xp_, 
+            multitask_sis_method=self.multitask_sis_method
+        )
         if not sorted_features: raise RuntimeError("SIS screening returned no features.")
         top_k_features = sorted_features[:n_select]
         print(f"  Selected top {len(top_k_features)} features via SIS for this attempt.")
@@ -287,6 +309,26 @@ class SISSOBase(BaseEstimator):
                   break
         return self.best_D_
 
+    def _select_best_dimension_info_crit(self):
+        """Selects the best dimension by finding the minimum AIC or BIC score."""
+        title = f"{self.selection_method.upper()} Score Summary"
+        print(f"\n--- {title} (Score to Minimize) ---")
+        print(" D | Score"); print("---|-------")
+        
+        best_score, self.best_D_ = float('inf'), -1
+        for D, (score, _) in sorted(self.cv_results_.items()):
+            print(f"{D:2d} | {score:10.4g}")
+            if score < best_score:
+                best_score, self.best_D_ = score, D
+        print("---|-------")
+        
+        if self.best_D_ == -1:
+            print("Model selection failed for all dimensions.")
+            return None
+            
+        print(f"Selected Best D = {self.best_D_} (Lowest {self.selection_method.upper()} Score: {best_score:.4g})")
+        return self.best_D_
+
     def fit(self, X, y, sample_weight=None):
         t_start_fit = time.time()
         if self.workdir: Path(self.workdir).mkdir(parents=True, exist_ok=True)
@@ -309,8 +351,10 @@ class SISSOBase(BaseEstimator):
 
             search_args = {"sisso_instance": self, "phi_sis_df": sis_subspace_df, "y": y_s, "D_max": self.max_D,
                            "task_type": self.task_type_, "max_feat_cross_corr": self.max_feat_cross_correlation,
-                           "sample_weight": sample_weight, "device": self.device, "torch_device": self.torch_device_}
+                           "sample_weight": sample_weight, "device": self.device, "torch_device": self.torch_device_,
+                           "X_df": X_df}
             
+            # This dispatch logic is correct and complete
             if self.task_type_ == CH_CLASSIFICATION:
                 warnings.warn("Task is 'ch_classification'. Overriding search_strategy with specialized 'geometric_greedy' search.")
                 search_results = _find_best_models_ch_greedy(**search_args)
@@ -321,8 +365,13 @@ class SISSOBase(BaseEstimator):
             elif self.search_strategy == 'sisso++':
                 search_results = _find_best_models_sisso_pp(**search_args)
                 self.timing_summary_[f'SISSO++ Search (SIS={sis_size})'] = time.time() - t_start_search
-            else:
-                search_args['X_df'] = X_df
+            elif self.search_strategy == 'omp':
+                search_results = _find_best_models_omp(**search_args)
+                self.timing_summary_[f'OMP Search (SIS={sis_size})'] = time.time() - t_start_search
+            elif self.search_strategy == 'miqp':
+                search_results = _find_best_models_miqp(**search_args)
+                self.timing_summary_[f'MIQP Search (SIS={sis_size})'] = time.time() - t_start_search
+            else: # 'greedy' is the default
                 search_results = _find_best_models_greedy(**search_args)
                 self.timing_summary_[f'Greedy Search (SIS={sis_size})'] = time.time() - t_start_search
             
@@ -346,47 +395,74 @@ class SISSOBase(BaseEstimator):
             t_start_selection = time.time()
             self.cv_results_ = {}
             n_samples = len(X_df)
-            cv_splitter = None
             
-            if self.selection_method == 'bootstrap':
-                print(f"\n--- Evaluating Dimensions using {self.n_bootstrap} Bootstrap OOB Samples ---")
-                cv_splitter = _BootstrapOutOfBagSplitter(n_splits=self.n_bootstrap, random_state=self.random_state)
-            
-            elif self.selection_method == 'cv' and self.cv is not None and self.cv > 1:
-                if self.cv == -1 or self.cv >= n_samples:
-                    print("\n--- Evaluating Dimensions using Leave-One-Out CV (LOOCV) ---")
-                    cv_splitter = LeaveOneOut()
-                else:
-                    print(f"\n--- Evaluating Dimensions using {self.cv}-Fold CV ---")
-                    if self.task_type_ in ALL_CLASSIFICATION_TASKS:
-                        min_class_count = pd.Series(y_s).value_counts().min()
-                        cv_folds = min(self.cv, min_class_count)
-                        if cv_folds >= 2:
-                            if cv_folds < self.cv: warnings.warn(f"Smallest class has {min_class_count} members. Reducing CV folds to {cv_folds}.")
-                            cv_splitter = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=self.random_state)
-                    else: 
-                        cv_splitter = KFold(n_splits=self.cv, shuffle=True, random_state=self.random_state)
-            
-            if cv_splitter:
-                for D, model_data in self.models_by_dim_.items():
-                    print(f"  Evaluating D={D}...")
-                    if model_data.get('is_parametric'):
-                         self.cv_results_[D] = (model_data['score'], 0.0)
-                         print(f"    Parametric model: using training score {model_data['score']:.4g} for evaluation.")
-                         continue
-                    
-                    X_d = self.feature_space_df_[model_data['features']]
-                    mean_score, std_score = _run_cv(X_d, y_s, cv_splitter, self.task_type_, self.model_params_, sample_weight)
-                    if np.isfinite(mean_score): self.cv_results_[D] = (mean_score, std_score)
-                    else: print(f"   Evaluation failed for D={D}")
-            
+            # --- THIS IS THE CORRECTED MODEL SELECTION LOGIC ---
+            if self.selection_method in ['cv', 'bootstrap']:
+                cv_splitter = None
+                if self.selection_method == 'bootstrap':
+                    print(f"\n--- Evaluating Dimensions using {self.n_bootstrap} Bootstrap OOB Samples ---")
+                    cv_splitter = _BootstrapOutOfBagSplitter(n_splits=self.n_bootstrap, random_state=self.random_state)
+                elif self.cv is not None and self.cv > 1:
+                    if self.cv == -1 or self.cv >= n_samples:
+                        print("\n--- Evaluating Dimensions using Leave-One-Out CV (LOOCV) ---")
+                        cv_splitter = LeaveOneOut()
+                    else:
+                        print(f"\n--- Evaluating Dimensions using {self.cv}-Fold CV ---")
+                        if self.task_type_ in ALL_CLASSIFICATION_TASKS:
+                            min_class_count = pd.Series(y_s).value_counts().min()
+                            cv_folds = min(self.cv, min_class_count)
+                            if cv_folds >= 2:
+                                if cv_folds < self.cv: warnings.warn(f"Smallest class has {min_class_count} members. Reducing CV folds to {cv_folds}.")
+                                cv_splitter = StratifiedKFold(n_splits=cv_folds, shuffle=True, random_state=self.random_state)
+                        else: 
+                            cv_splitter = KFold(n_splits=self.cv, shuffle=True, random_state=self.random_state)
+                
+                if cv_splitter and self.models_by_dim_:
+                    for D, model_data in self.models_by_dim_.items():
+                        print(f"  Evaluating D={D}...")
+                        if model_data.get('is_parametric'):
+                             self.cv_results_[D] = (model_data['score'], 0.0)
+                             print(f"    Parametric model: using training score {model_data['score']:.4g} for evaluation.")
+                             continue
+                        
+                        X_d = self.feature_space_df_[model_data['features']]
+                        mean_score, std_score = _run_cv(X_d, y_s, cv_splitter, self.task_type_, self.model_params_, sample_weight)
+                        if np.isfinite(mean_score): self.cv_results_[D] = (mean_score, std_score)
+                        else: print(f"   Evaluation failed for D={D}")
+                
                 self._select_best_dimension_cv()
-            else:
-                print("\nNo validation method active. Selecting model with lowest training score.")
+
+            elif self.selection_method in ['aic', 'bic']:
+                print(f"\n--- Evaluating Dimensions using {self.selection_method.upper()} ---")
+                if self.task_type_ != REGRESSION:
+                    raise ValueError(f"'{self.selection_method.upper()}' selection is only available for regression tasks.")
+                
+                for D, model_data in self.models_by_dim_.items():
+                    rmse = model_data['score']
+                    if not np.isfinite(rmse): continue
+                    
+                    rss = (rmse ** 2) * n_samples
+                    k = D + (1 if not self.fix_intercept_ else 0)
+                    
+                    if rss <= 1e-12: # Use a small tolerance for near-perfect models
+                        score = -np.inf 
+                    else:
+                        if self.selection_method == 'aic':
+                            score = n_samples * np.log(rss / n_samples) + 2 * k
+                        else: # bic
+                            score = n_samples * np.log(rss / n_samples) + k * np.log(n_samples)
+
+                    self.cv_results_[D] = (score, 0.0)
+                
+                self._select_best_dimension_info_crit() # <<< THIS WAS THE KEY FIX
+            
+            else: # Fallback
+                print("\nNo validation method specified. Selecting model with lowest training score.")
                 if self.models_by_dim_:
                      self.best_D_ = min(self.models_by_dim_, key=lambda D: self.models_by_dim_[D]['score'])
                      print(f"Selected Best D = {self.best_D_}")
                 for D, model_data in self.models_by_dim_.items(): self.cv_results_[D] = (model_data['score'], 0.0)
+            # --- END OF CORRECTION ---
             
             self.timing_summary_[f'Model Selection (SIS={sis_size})'] = time.time() - t_start_selection
             
@@ -509,7 +585,7 @@ class SISSOBase(BaseEstimator):
         """
         transformed_X = pd.DataFrame(index=X_primary.index, dtype=dtype)
         
-        primary_symbols = list(self.sym_clean_to_original_map_.keys())
+        primary_symbols = self.primary_symbols_
         feature_values = [X_primary[col].values for col in X_primary.columns]
         
         for i, expr in enumerate(descriptor_sym_expr):
@@ -542,13 +618,19 @@ class SISSOBase(BaseEstimator):
 
     def predict(self, X):
         if self.best_model_ is None: raise RuntimeError("Call fit() before predict().")
-        
+
+        X_df = pd.DataFrame(X) if not isinstance(X, pd.DataFrame) else X.copy()
+
         is_parametric = hasattr(self.best_model_, 'is_parametric') and self.best_model_.is_parametric
         if is_parametric:
-            X_df = pd.DataFrame(X)
-            return self.best_model_.predict(X_df.astype(self.dtype))
+            if len(X_df.columns) != len(self.sym_clean_to_original_map_):
+                raise ValueError(f"Prediction input has {len(X_df.columns)} columns, but model was trained on {len(self.sym_clean_to_original_map_)} primary features.")
+            
+            X_df_clean = X_df.copy()
+            X_df_clean.columns = [str(s) for s in self.sym_clean_to_original_map_.keys()]
+            return self.best_model_.predict(X_df_clean.astype(self.dtype))
 
-        transformed_X = self._transform_X(X)
+        transformed_X = self._transform_X(X_df)
 
         if isinstance(self.best_model_, GPUModel):
             y_pred_gpu = self.best_model_.predict(transformed_X.values)
@@ -609,7 +691,7 @@ class SISSOBase(BaseEstimator):
         )
 
     def best_model_latex(self, target_name='y'):
-        """NEW: Returns a LaTeX formatted string of the best model formula."""
+        """Returns a LaTeX formatted string of the best model formula."""
         if self.best_D_ is None or self.best_D_ not in self.models_by_dim_:
             return "No best model found. Please fit the model first."
         model_info = self.models_by_dim_[self.best_D_]
@@ -627,7 +709,7 @@ class SISSOBase(BaseEstimator):
         final_model_is_parametric = hasattr(self.best_model_, 'is_parametric') and self.best_model_.is_parametric
         selection_str = self.selection_method.upper()
         if self.selection_method == 'cv':
-            selection_str = f"{self.cv}-Fold CV"
+            selection_str = f"{self.cv}-Fold CV" if self.cv != -1 else "LOOCV"
         elif self.selection_method == 'bootstrap':
             selection_str = f"{self.n_bootstrap} Bootstraps (OOB)"
         
@@ -647,7 +729,7 @@ class SISSOBase(BaseEstimator):
         
         best_model_data = self.models_by_dim_[self.best_D_]
         best_cv_score, best_cv_std = self.cv_results_.get(self.best_D_, (np.nan, np.nan))
-        score_label = plot_utils._get_score_label(self.task_type_, self.loss).replace('(CV)', f'({selection_str})')
+        score_label = plot_utils._get_score_label(self.task_type_, self.loss, self.selection_method).replace('(CV)', f'({selection_str})')
         
         report_lines.append(f"\n******* BEST MODEL (D={self.best_D_}) *******")
         report_lines.append(f"Score {score_label}: {best_cv_score:.6g} +/- {best_cv_std:.6g}")
@@ -669,7 +751,6 @@ class SISSOBase(BaseEstimator):
 
         return "\n".join(report_lines)
 
-    # --- NEW: Advanced Interpretation and Plotting Methods ---
     def plot_cv_results(self, **kwargs):
         return plot_utils.plot_cv_results(self.cv_results_, self.best_D_, self.task_type_, self.loss, self.selection_method, **kwargs)
     def plot_parity(self, X, y, **kwargs):
@@ -684,34 +765,34 @@ class SISSOBase(BaseEstimator):
         return plot_utils.plot_descriptor_histograms(self, X, **kwargs)
     
     def plot_feature_importance(self, X, **kwargs):
-        """NEW: Plots the scaled importance of each descriptor in the final model."""
+        """Plots the scaled importance of each descriptor in the final model."""
         return plot_utils.plot_feature_importance(self, X, **kwargs)
 
     def plot_partial_dependence(self, X, features_to_plot=None, **kwargs):
         """
-        NEW: Creates a Partial Dependence Plot (PDP) to visualize the model's response.
-        - For 1D models, this plots Predicted vs. Descriptor.
-        - For >1D models, specify one or two features in `features_to_plot` to see their effect.
+        Creates a Partial Dependence Plot (PDP) to visualize the model's response.
         """
         return plot_utils.plot_partial_dependence(self, X, features_to_plot, **kwargs)
 
 
 class SISSORegressor(SISSOBase, RegressorMixin):
-    def __init__(self, **kwargs): super().__init__(**kwargs)
+    def __init__(self, **kwargs):
+        kwargs.setdefault('calc_type', 'regression')
+        super().__init__(**kwargs)
 
 class SISSOClassifier(SISSOBase, ClassifierMixin):
     def __init__(self, **kwargs):
-        kwargs.setdefault('_task_type_raw', 'classification_svm')
+        kwargs.setdefault('calc_type', 'classification_svm')
         super().__init__(**kwargs)
 
 class SISSOLogRegressor(SISSOBase, ClassifierMixin):
     def __init__(self, **kwargs):
-        kwargs.setdefault('_task_type_raw', 'classification_logreg')
+        kwargs.setdefault('calc_type', 'classification_logreg')
         super().__init__(**kwargs)
 
 class SISSOCHClassifier(SISSOBase, ClassifierMixin):
     def __init__(self, **kwargs):
-        kwargs.setdefault('_task_type_raw', 'ch_classification')
+        kwargs.setdefault('calc_type', 'ch_classification')
         super().__init__(**kwargs)
     
     def predict_proba(self, X):

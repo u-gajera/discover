@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 This module handles all aspects of feature generation and manipulation.
 It includes the unit-aware UFeature class and the core logic for building

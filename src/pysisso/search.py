@@ -1,12 +1,11 @@
-# --- START OF FILE search.py ---
-
-# -*- coding: utf-8 -*-
 """
 This module implements the different search strategies for finding the best
 feature combinations (descriptors). It includes:
 - Brute-force search: Exhaustively checks all combinations.
 - Greedy search: Iteratively builds up descriptors one feature at a time.
 - SISSO++ search: A breadth-first search using efficient QR-based updates.
+- OMP search: A robust greedy search using orthogonal matching pursuit.
+- MIQP search: An exact L0 solver using mixed-integer quadratic programming.
 - A standalone non-linear optimization function for model refinement.
 """
 import numpy as np
@@ -26,6 +25,15 @@ from .scoring import _score_single_model, run_SIS, GPUModel, _refit_and_score_fi
 from .features import PARAMETRIC_OP_DEFS, CUPY_AVAILABLE, TORCH_AVAILABLE
 from sklearn.preprocessing import LabelBinarizer
 from sklearn.metrics import mean_squared_error
+from sklearn.linear_model import LinearRegression
+
+# --- Import Gurobi for MIQP ---
+try:
+    import gurobipy as gp
+    from gurobipy import GRB
+    GUROBI_AVAILABLE = True
+except ImportError:
+    GUROBI_AVAILABLE = False
 
 # Optional GPU imports
 try:
@@ -60,16 +68,22 @@ class ParametricModel:
     """A wrapper for a non-linear model defined by a symbolic expression."""
     def __init__(self, sym_expr, primary_symbols):
         self.sym_expr = sym_expr
-        self.primary_symbols = primary_symbols
+        # Store the STRING version of the symbols for lookup.
+        self.primary_symbols_str = [str(s) for s in primary_symbols]
         self.is_parametric = True
-        self._predict_func = sympy.lambdify(primary_symbols, self.sym_expr, 'numpy')
+        # Create the callable function using the string names, which matches DataFrame columns.
+        self._predict_func = sympy.lambdify(self.primary_symbols_str, self.sym_expr, 'numpy')
 
     def predict(self, X):
         """Predicts using the symbolic formula, requires primary features."""
-        if not all(str(s) in X.columns for s in self.primary_symbols):
-             raise ValueError(f"Prediction input missing primary features. Required: {[str(s) for s in self.primary_symbols]}")
+        # This check now correctly compares strings to strings.
+        if not all(s in X.columns for s in self.primary_symbols_str):
+             raise ValueError(f"Prediction input missing primary features. "
+                              f"Required: {self.primary_symbols_str}. "
+                              f"Provided: {list(X.columns)}")
         
-        feature_values = [X[str(s)].values for s in self.primary_symbols]
+        # Look up values in the DataFrame using the string names.
+        feature_values = [X[s].values for s in self.primary_symbols_str]
         return self._predict_func(*feature_values)
 
 
@@ -167,11 +181,174 @@ def _refine_model_with_nlopt(sisso_instance, y, sample_weight, current_model_dat
 # Search Strategy Implementations
 # =============================================================================
 
+def _find_best_models_omp(sisso_instance, phi_sis_df, y, D_max, task_type,
+                           max_feat_cross_corr, sample_weight, device, torch_device, **kwargs):
+    """
+    Finds models using Orthogonal Matching Pursuit (OMP), a robust greedy method.
+    Note: OMP is only defined for regression tasks.
+    """
+    print("\n" + "="*20 + " Starting OMP (Orthogonal Matching Pursuit) Search " + "="*20)
+    if task_type not in ['regression', 'multitask']:
+        raise ValueError("OMP search is currently implemented only for regression and multitask regression.")
+
+    models_by_dim = {}
+    phi_pruned = _prune_by_correlation(phi_sis_df, max_feat_cross_corr)
+    candidate_features_df = phi_pruned.copy()
+    
+    selected_features = []
+    residual = y.copy()
+    
+    model_params = sisso_instance.model_params_
+    timing_summary = sisso_instance.timing_summary_
+
+    for D_iter in range(1, D_max + 1):
+        t_start_d = time.time()
+        print(f"\n--- OMP Search: Dimension {D_iter} ---")
+        
+        if candidate_features_df.empty:
+            print("  No more features to select. Stopping."); break
+
+        # Find the feature most correlated with the current residual
+        correlations = candidate_features_df.corrwith(residual).abs()
+        best_new_feature = correlations.idxmax()
+        
+        selected_features.append(best_new_feature)
+        candidate_features_df.drop(columns=[best_new_feature], inplace=True)
+        print(f"  Selected feature for D={D_iter}: '{best_new_feature}'")
+
+        # Solve the least squares problem on the current set of selected features
+        X_current_dim_df = phi_pruned[selected_features]
+        score, model_data = _score_single_model(X_current_dim_df, y, task_type, model_params, sample_weight, device, torch_device)
+        timing_summary[f'OMP Search D={D_iter}'] = time.time() - t_start_d
+
+        if model_data is None:
+            print(f"  Could not fit a valid model for D={D_iter}. Stopping.")
+            selected_features.pop(); break
+            
+        print(f"    Model score for D={D_iter} (min): {score:.6g}")
+
+        # Store the results for this dimension
+        current_sym_features = [sisso_instance.feature_space_sym_map_.get(f, sympy.sympify(f)) for f in selected_features]
+        models_by_dim[D_iter] = {
+            'features': selected_features.copy(), 'score': score, 'model': model_data.get('model'),
+            'coef': model_data.get('coef'), 'sym_features': current_sym_features, 'is_parametric': False
+        }
+
+        # Update the residual
+        model_object = model_data['model']
+        if isinstance(model_object, GPUModel):
+            y_pred_gpu = model_object.predict(X_current_dim_df.values)
+            y_pred = cp.asnumpy(y_pred_gpu) if CUPY_AVAILABLE and device == 'cuda' else y_pred_gpu.cpu().numpy()
+        else:
+            y_pred = model_object.predict(X_current_dim_df)
+        
+        residual = y - y_pred
+
+    return models_by_dim
+
+def _find_best_models_miqp(sisso_instance, phi_sis_df, y, D_max, task_type,
+                           max_feat_cross_corr, sample_weight, device, torch_device, **kwargs):
+    """
+    Finds the provably optimal L0-norm model using MIQP. Requires Gurobi.
+    Note: MIQP is only defined for regression tasks with L2 loss.
+    """
+    print("\n" + "="*20 + " Starting MIQP (Exact L0) Search " + "="*20)
+    if not GUROBI_AVAILABLE:
+        raise ImportError("MIQP search requires the 'gurobipy' package. Please install it and acquire a license.")
+    if task_type != 'regression' or sisso_instance.loss != 'l2':
+        raise ValueError("MIQP search is currently implemented only for regression with L2 loss.")
+
+    models_by_dim = {}
+    phi_pruned = _prune_by_correlation(phi_sis_df, max_feat_cross_corr)
+    X_pruned = phi_pruned.values
+    y_np = y.values
+    
+    n_samples, n_features_pruned = X_pruned.shape
+    feature_names = list(phi_pruned.columns)
+    model_params = sisso_instance.model_params_
+    
+    fit_intercept = model_params.get('fit_intercept', True)
+    X = X_pruned
+    if fit_intercept:
+        X = np.c_[np.ones(n_samples), X_pruned]
+
+    # Estimate a reasonable "Big M" value for the MIQP constraints
+    try:
+        ridge_model = LinearRegression(fit_intercept=False).fit(X, y_np)
+        M = 10 * np.max(np.abs(ridge_model.coef_))
+        if M < 1.0 or not np.isfinite(M): M = 10.0
+    except Exception:
+        M = 10.0 # Fallback M
+    print(f"  Using Big-M value: {M:.2f}")
+
+    # Precompute Q = X.T @ X and c = X.T @ y for the quadratic objective
+    Q = X.T @ X
+    c_lin = X.T @ y_np
+
+    for D_iter in range(1, D_max + 1):
+        t_start_d = time.time()
+        print(f"\n--- MIQP Search: Dimension {D_iter} ---")
+        
+        try:
+            m = gp.Model("miqp_sisso")
+            m.setParam('OutputFlag', 0)
+            m.setParam('TimeLimit', 300)
+
+            beta = m.addMVar(shape=X.shape[1], lb=-GRB.INFINITY, name="beta")
+            z = m.addMVar(shape=X.shape[1], vtype=GRB.BINARY, name="z")
+            
+            m.setObjective(beta @ Q @ beta - 2 * c_lin @ beta, GRB.MINIMIZE)
+            
+            if fit_intercept:
+                m.addConstr(z[0] == 1, "force_intercept")
+                m.addConstr(z.sum() == D_iter + 1, "cardinality")
+            else:
+                m.addConstr(z.sum() == D_iter, "cardinality")
+
+            m.addConstr(beta <= M * z, "bigM_pos")
+            m.addConstr(beta >= -M * z, "bigM_neg")
+
+            m.optimize()
+            
+            if m.Status not in [GRB.OPTIMAL, GRB.SUBOPTIMAL, GRB.TIME_LIMIT]:
+                print(f"  MIQP solver failed for D={D_iter} (Status: {m.Status}). Stopping.")
+                break
+            if m.SolCount == 0:
+                print(f"  MIQP solver found no feasible solution for D={D_iter}. Stopping.")
+                break
+            
+            beta_sol = beta.X
+            selected_indices = np.where(np.abs(beta_sol) > 1e-6)[0]
+            
+            final_feature_names = [feature_names[i - 1] for i in selected_indices if i > 0] if fit_intercept else [feature_names[i] for i in selected_indices]
+            
+            if not final_feature_names: continue
+
+            X_combo_df = phi_pruned[final_feature_names]
+            score, model_data = _score_single_model(X_combo_df, y, task_type, model_params, sample_weight, device, torch_device)
+            sisso_instance.timing_summary_[f'MIQP Search D={D_iter}'] = time.time() - t_start_d
+
+            if model_data is None: continue
+
+            print(f"    Optimal model for D={len(final_feature_names)} found with score: {score:.6g}")
+            sym_features = [sisso_instance.feature_space_sym_map_.get(f, sympy.sympify(f)) for f in final_feature_names]
+            models_by_dim[len(final_feature_names)] = {
+                'features': final_feature_names, 'score': score, 'model': model_data.get('model'),
+                'coef': model_data.get('coef'), 'sym_features': sym_features, 'is_parametric': False
+            }
+
+        except gp.GurobiError as e:
+            print(f"  Gurobi error on D={D_iter}: {e}. Stopping MIQP search."); break
+        except Exception as e:
+            print(f"  An unexpected error occurred during MIQP search for D={D_iter}: {e}"); break
+            
+    return models_by_dim
+
+
 def _score_ch_combo(new_feature, base_features, phi_df, y, task_type, model_params, sample_weight):
     """Helper function to score a feature combination for the CH geometric search."""
     combo_features = base_features + [new_feature]
     X_combo_df = phi_df[combo_features]
-    # For CH search, we don't use GPU scoring, so device args are fixed to CPU
     score, model_data = _score_single_model(X_combo_df, y, task_type, model_params, sample_weight, 'cpu', None)
     if model_data:
         return score, new_feature, model_data
@@ -181,11 +358,9 @@ def _score_ch_combo(new_feature, base_features, phi_df, y, task_type, model_para
 def _find_best_models_ch_greedy(sisso_instance, phi_sis_df, y, D_max, task_type,
                                 max_feat_cross_corr, sample_weight, **kwargs):
     """
-    Finds models for Convex Hull classification using a specialized greedy search
-    based on the geometric overlap score, not a statistical proxy.
+    Finds models for Convex Hull classification using a specialized greedy search.
     """
     print("\n" + "="*20 + " Starting Geometric Greedy Search (Convex Hull) " + "="*20)
-
     models_by_dim = {}
     selected_features = []
     phi_pruned = _prune_by_correlation(phi_sis_df, max_feat_cross_corr)
@@ -202,10 +377,7 @@ def _find_best_models_ch_greedy(sisso_instance, phi_sis_df, y, D_max, task_type,
         
         print(f"  Evaluating {len(remaining_features)} candidate features to add to the descriptor...")
         
-        tasks = (delayed(_score_ch_combo)(
-            new_feat, selected_features, phi_pruned, y, task_type, model_params, sample_weight
-        ) for new_feat in remaining_features)
-        
+        tasks = (delayed(_score_ch_combo)(new_feat, selected_features, phi_pruned, y, task_type, model_params, sample_weight) for new_feat in remaining_features)
         results = Parallel(n_jobs=sisso_instance.n_jobs, prefer="threads")(tasks)
         
         valid_results = [res for res in results if np.isfinite(res[0])]
@@ -214,12 +386,9 @@ def _find_best_models_ch_greedy(sisso_instance, phi_sis_df, y, D_max, task_type,
             
         best_score, best_new_feature, best_model_data = min(valid_results, key=lambda x: x[0])
         
-        # Check if the new model is an improvement (only for D>1)
-        if D_iter > 1:
-            prev_best_score = models_by_dim[D_iter-1]['score']
-            if best_score >= prev_best_score:
-                print(f"  No improvement found for D={D_iter}. Best D={D_iter-1} score was {prev_best_score:.4g}, current is {best_score:.4g}. Stopping.")
-                break
+        if D_iter > 1 and best_score >= models_by_dim[D_iter-1]['score']:
+            print(f"  No improvement found for D={D_iter}. Best D={D_iter-1} score was {models_by_dim[D_iter-1]['score']:.4g}, current is {best_score:.4g}. Stopping.")
+            break
 
         selected_features.append(best_new_feature)
         sisso_instance.timing_summary_[f'Geometric Search D={D_iter}'] = time.time() - t_start_d
@@ -228,14 +397,10 @@ def _find_best_models_ch_greedy(sisso_instance, phi_sis_df, y, D_max, task_type,
 
         sym_features = [sisso_instance.feature_space_sym_map_.get(f, sympy.sympify(f)) for f in selected_features]
         models_by_dim[D_iter] = {
-            'features': selected_features.copy(),
-            'score': best_score,
-            'model': best_model_data.get('model'),
-            'coef': None, # CH models don't have coefficients in the traditional sense
-            'sym_features': sym_features,
-            'is_parametric': False
+            'features': selected_features.copy(), 'score': best_score,
+            'model': best_model_data.get('model'), 'coef': None,
+            'sym_features': sym_features, 'is_parametric': False
         }
-
     return models_by_dim
 
 
@@ -249,13 +414,11 @@ def _score_brute_force_combo(combo, phi_df, y, task_type, model_params, sample_w
 
 
 def _find_best_models_brute_force(sisso_instance, phi_sis_df, y, D_max, task_type,
-                                   max_feat_cross_corr, sample_weight, device, torch_device):
+                                   max_feat_cross_corr, sample_weight, device, torch_device, **kwargs):
     """
     Finds the best model for each dimension by testing all combinations.
     """
     print("\n" + "="*20 + " Starting Brute-Force Search " + "="*20)
-    print(f"INFO: Brute-force search will operate on the provided {phi_sis_df.shape[1]} features.")
-
     models_by_dim = {}
     phi_pruned = _prune_by_correlation(phi_sis_df, max_feat_cross_corr)
     feature_candidates = list(phi_pruned.columns)
@@ -268,8 +431,7 @@ def _find_best_models_brute_force(sisso_instance, phi_sis_df, y, D_max, task_typ
         t_start_d = time.time()
         print(f"\n--- Brute-Force: Searching for Dimension {D_iter} ---")
         if D_iter > n_features:
-            print(f"  Dimension {D_iter} is larger than the number of available features ({n_features}). Stopping.")
-            break
+            print(f"  Dimension {D_iter} is larger than the number of available features ({n_features}). Stopping."); break
         try:
             n_combos = math.comb(n_features, D_iter)
         except ValueError:
@@ -281,9 +443,7 @@ def _find_best_models_brute_force(sisso_instance, phi_sis_df, y, D_max, task_typ
         if n_combos == 0: continue
             
         combos = combinations(feature_candidates, D_iter)
-        tasks = (delayed(_score_brute_force_combo)(
-                    combo, phi_pruned, y, task_type, model_params, sample_weight, device, torch_device
-                 ) for combo in combos)
+        tasks = (delayed(_score_brute_force_combo)(combo, phi_pruned, y, task_type, model_params, sample_weight, device, torch_device) for combo in combos)
         results = Parallel(n_jobs=sisso_instance.n_jobs, prefer="threads")(tasks)
         
         valid_results = [res for res in results if np.isfinite(res[0])]
@@ -303,13 +463,11 @@ def _find_best_models_brute_force(sisso_instance, phi_sis_df, y, D_max, task_typ
 
 
 def _find_best_models_greedy(sisso_instance, phi_sis_df, y, X_df, D_max, task_type,
-                             max_feat_cross_corr, sample_weight, device, torch_device):
+                             max_feat_cross_corr, sample_weight, device, torch_device, **kwargs):
     """
     Finds models using a greedy, iterative approach (Sparsifying Operator).
     """
     print("\n" + "="*20 + " Starting Greedy (Sparsifying Operator) Search " + "="*20)
-    print(f"INFO: Greedy search will operate on the provided {phi_sis_df.shape[1]} features.")
-    
     models_by_dim = {}
     selected_features = []
     current_target = y.copy()
@@ -358,38 +516,31 @@ def _find_best_models_greedy(sisso_instance, phi_sis_df, y, X_df, D_max, task_ty
         
         y_numeric = y.values.flatten()
         current_target = y_numeric - y_pred
-
     return models_by_dim
 
 
 def _find_best_models_sisso_pp(sisso_instance, phi_sis_df, y, D_max, task_type,
-                               max_feat_cross_corr, sample_weight, device, torch_device):
+                               max_feat_cross_corr, sample_weight, device, 
+                               torch_device, **kwargs): # noqa: F401
     """
     Finds models using the SISSO++ breadth-first, QR-accelerated search.
-    This version is fully GPU-accelerated.
     """
     print("\n" + "="*20 + " Starting SISSO++ (Breadth-First QR) Search " + "="*20)
-    
-    # --- 0. Set up GPU/CPU backend ---
     xp = np
     X_data = phi_sis_df.values
     dtype = np.dtype(sisso_instance.dtype).type
     
     if device == 'cuda' and CUPY_AVAILABLE:
-        print("  Using CUDA backend for SISSO++ search.")
-        xp = cp
+        print("  Using CUDA backend for SISSO++ search."); xp = cp
         X_data = xp.asarray(X_data, dtype=dtype)
     elif device == 'mps' and TORCH_AVAILABLE:
-        print("  Using MPS backend for SISSO++ search.")
-        xp = torch
+        print("  Using MPS backend for SISSO++ search."); xp = torch
         torch_dtype = torch.float32 if dtype == np.float32 else torch.float64
         X_data = torch.from_numpy(X_data).to(torch_device, dtype=torch_dtype)
     else:
         print("  Using CPU (NumPy) backend for SISSO++ search.")
 
-    # --- 1. Prepare data and OLS proxy target ---
     phi_pruned = _prune_by_correlation(phi_sis_df, max_feat_cross_corr)
-    # The pruning is done on CPU, now we get the indices and use them with the GPU array
     pruned_indices = [phi_sis_df.columns.get_loc(col) for col in phi_pruned.columns]
     feature_names = list(phi_pruned.columns)
     
@@ -404,29 +555,22 @@ def _find_best_models_sisso_pp(sisso_instance, phi_sis_df, y, D_max, task_type,
     elif task_type == MULTITASK:
         print("INFO: For 'sisso++' multitask, using sum of OLS-RSS across all targets as a proxy for search.")
         y_proxy_np = y.values
-    else: # REGRESSION
+    else:
         y_proxy_np = y.values.reshape(-1, 1)
 
-    # Move proxy target to the same device as X
     y_proxy = xp.asarray(y_proxy_np, dtype=dtype) if xp != torch else torch.from_numpy(y_proxy_np).to(torch_device, dtype=X.dtype)
 
     fit_intercept = sisso_instance.model_params_.get('fit_intercept', True)
     if fit_intercept:
-        y_mean = xp.mean(y_proxy, axis=0)
-        y_c = y_proxy - y_mean
-        X_mean = xp.mean(X, axis=0)
-        X_c = X - X_mean
+        y_mean, X_mean = xp.mean(y_proxy, axis=0), xp.mean(X, axis=0)
+        y_c, X_c = y_proxy - y_mean, X - X_mean
     else:
         y_c, X_c = y_proxy, X
 
-    # --- 2. Initialize search variables ---
-    models_by_dim = {}
-    timing_summary = sisso_instance.timing_summary_
+    models_by_dim, timing_summary = {}, sisso_instance.timing_summary_
     beam_width = n_features
     beam_width_decay = getattr(sisso_instance, 'beam_width_decay', 1.0)
-    print(f"INFO: Initial beam width: {beam_width}, Decay factor: {beam_width_decay}")
 
-    # --- 3. Dimension 1 search ---
     t_start_d1 = time.time()
     print("\n--- SISSO++ Search: Dimension 1 ---")
     d1_results = []
@@ -450,12 +594,10 @@ def _find_best_models_sisso_pp(sisso_instance, phi_sis_df, y, D_max, task_type,
     d1_results.sort(key=lambda item: item['proxy_score'])
     best_models_at_level = d1_results[:beam_width]
 
-    # Refit the best 1D model with the actual scoring function
     best_d1_info = best_models_at_level[0]
     final_score, final_model, final_coef = _refit_and_score_final_model(
         best_d1_info['indices'], phi_pruned.values, y, task_type, sisso_instance.model_params_,
-        sample_weight, device, torch_device, feature_names
-    )
+        sample_weight, device, torch_device, feature_names)
     
     if final_model is not None:
         sym_features = [sisso_instance.feature_space_sym_map_[feature_names[i]] for i in best_d1_info['indices']]
@@ -463,63 +605,48 @@ def _find_best_models_sisso_pp(sisso_instance, phi_sis_df, y, D_max, task_type,
                             'model': final_model, 'coef': final_coef, 'sym_features': sym_features, 'is_parametric': False}
         print(f"    Best model for D=1 found with score: {final_score:.6g}")
     timing_summary['SISSO++ Search D=1'] = time.time() - t_start_d1
-    
     upper_bound_rss = best_d1_info['rss']
 
-    # --- 4. Search for higher dimensions (D > 1) ---
     for D_iter in range(2, D_max + 1):
         t_start_d = time.time()
         print(f"\n--- SISSO++ Search: Dimension {D_iter} ---")
         next_level_candidates = []
         
         for model_info in best_models_at_level:
-            if model_info['rss'] > upper_bound_rss:
-                continue
-
+            if model_info['rss'] > upper_bound_rss: continue
             prev_indices = model_info['indices']
-            # QR decomposition on the GPU
             if 'q' not in model_info:
-                if xp == torch:
-                    model_info['q'], _ = torch.linalg.qr(X_c[:, prev_indices])
-                else: # CuPy/NumPy
-                    model_info['q'], _ = xp.linalg.qr(X_c[:, prev_indices])
+                model_info['q'], _ = xp.linalg.qr(X_c[:, prev_indices]) if xp != torch else torch.linalg.qr(X_c[:, prev_indices])
             
             prev_q = model_info['q']
             residual_after_proj = y_c - prev_q @ (prev_q.T @ y_c)
             rss_after_proj_vec = xp.sum(residual_after_proj**2, axis=0)
             
-            start_idx = prev_indices[-1] + 1
-            for new_feat_idx in range(start_idx, n_features):
-                new_col = X_c[:, new_feat_idx]
-                w = new_col - prev_q @ (prev_q.T @ new_col)
+            for new_feat_idx in range(prev_indices[-1] + 1, n_features):
+                w = X_c[:, new_feat_idx] - prev_q @ (prev_q.T @ X_c[:, new_feat_idx])
                 norm_sq_w = xp.dot(w, w)
-                
                 if norm_sq_w < 1e-18: continue
 
                 new_rss_vec = rss_after_proj_vec - (residual_after_proj.T @ w)**2 / norm_sq_w
                 new_total_rss = float(xp.sum(new_rss_vec))
                 new_proxy_score = np.sqrt(new_total_rss / (n_samples * y_c.shape[1]))
                 
-                new_indices = prev_indices + [new_feat_idx]
-                next_level_candidates.append({'proxy_score': new_proxy_score, 'rss': new_total_rss, 'indices': new_indices})
+                next_level_candidates.append({'proxy_score': new_proxy_score, 'rss': new_total_rss, 'indices': prev_indices + [new_feat_idx]})
 
         if not next_level_candidates:
             print("  No new valid models found for this dimension. Stopping search."); break
             
         next_level_candidates.sort(key=lambda item: item['proxy_score'])
-        
         upper_bound_rss = min(upper_bound_rss, next_level_candidates[0]['rss'])
         
         if beam_width_decay < 1.0:
             beam_width = max(D_iter + 1, int(beam_width * beam_width_decay))
-        
         best_models_at_level = next_level_candidates[:beam_width]
 
         best_d_iter_info = best_models_at_level[0]
         final_score, final_model, final_coef = _refit_and_score_final_model(
             best_d_iter_info['indices'], phi_pruned.values, y, task_type, sisso_instance.model_params_,
-            sample_weight, device, torch_device, feature_names
-        )
+            sample_weight, device, torch_device, feature_names)
         
         if final_model is not None:
             sym_features = [sisso_instance.feature_space_sym_map_[feature_names[i]] for i in best_d_iter_info['indices']]

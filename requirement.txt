@@ -7,6 +7,7 @@ joblib
 matplotlib
 seaborn
 pint
+gurobipy
 # For optional GPU support, install the appropriate version:
 # cupy-cuda11x
 # torch
