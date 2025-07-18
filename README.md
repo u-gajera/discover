@@ -95,7 +95,7 @@ Here is a minimal example:
   "search_strategy": "greedy",
   "selection_method": "cv",
   "cv": 5
-}
+}```
 
 # Step 3: Run the Analysis
 
