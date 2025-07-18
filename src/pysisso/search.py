@@ -7,6 +7,16 @@ feature combinations (descriptors). It includes:
 - OMP search: A robust greedy search using orthogonal matching pursuit.
 - MIQP search: An exact L0 solver using mixed-integer quadratic programming.
 - A standalone non-linear optimization function for model refinement.
+
+Core SIS/SISSO search engine.
+
+Workflow per dimension D:
+    1. **SIS** – keep the top-K single features most correlated with the target.
+       Example: from 100 000 raw candidates keep K = 300.
+    2. **SO**  – solve a sparse linear regression on those K features to pick
+       the best D-term combination.
+
+Iterates D = 1…max_D, saving JSON summaries after each pass.
 """
 import numpy as np
 import sympy
@@ -88,21 +98,31 @@ class ParametricModel:
 
 
 def _prune_by_correlation(phi_df, threshold):
-    """Removes features from a DataFrame that are highly correlated with each other."""
+    """Removes features from a DataFrame that are highly correlated with each other, keeping one from each cluster."""
     if threshold >= 1.0:
         return phi_df
     print(f"  Pruning feature space with correlation threshold > {threshold}...")
     corr_matrix = phi_df.corr().abs()
-    upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
-    to_drop = [column for column in upper.columns if any(upper[column] > threshold)]
-    pruned_df = phi_df.drop(columns=to_drop)
-    print(f"    Removed {len(to_drop)} features due to high cross-correlation. Kept {pruned_df.shape[1]}.")
-    return pruned_df
+    
+    # Greedy keep-one clustering logic
+    keep = []
+    seen = set()
+    for col in phi_df.columns:
+        if col in seen:
+            continue
+        keep.append(col)
+        seen.add(col)
+        # Find other columns highly correlated with the current one and mark them to be skipped
+        correlated_cols = corr_matrix.index[corr_matrix[col] > threshold].tolist()
+        seen.update(correlated_cols)
+    
+    n_dropped = phi_df.shape[1] - len(keep)
+    if n_dropped > 0:
+        print(f"    Removed {n_dropped} features due to high cross-correlation. Kept {len(keep)}.")
+    
+    return phi_df[keep]
 
-
-# =============================================================================
 # Non-Linear Optimization (NLopt) Refinement
-# =============================================================================
 
 def _refine_model_with_nlopt(sisso_instance, y, sample_weight, current_model_data):
     """
@@ -176,10 +196,7 @@ def _refine_model_with_nlopt(sisso_instance, y, sample_weight, current_model_dat
     
     return refined_model
 
-
-# =============================================================================
 # Search Strategy Implementations
-# =============================================================================
 
 def _find_best_models_omp(sisso_instance, phi_sis_df, y, D_max, task_type,
                            max_feat_cross_corr, sample_weight, device, torch_device, **kwargs):
@@ -484,15 +501,15 @@ def _find_best_models_greedy(sisso_instance, phi_sis_df, y, X_df, D_max, task_ty
         if features_to_screen_df.empty:
             print("  No more features to select. Stopping."); break
 
-        sorted_candidates = run_SIS(features_to_screen_df, current_target, task_type, xp=sisso_instance.xp_)
-        if not sorted_candidates:
+        sorted_candidates_series = run_SIS(features_to_screen_df, current_target, task_type, xp=sisso_instance.xp_)
+        if sorted_candidates_series.empty:
             print(f"  SIS found no new correlated features. Stopping at D={D_iter-1}."); break
 
-        best_new_feature = sorted_candidates[0]
+        best_new_feature = sorted_candidates_series.index[0]
         selected_features.append(best_new_feature)
         print(f"  Selected feature for D={D_iter}: '{best_new_feature}'")
 
-        X_current_dim_df = sisso_instance.feature_space_df_[selected_features]
+        X_current_dim_df = phi_pruned[selected_features]
         score, model_data = _score_single_model(X_current_dim_df, y, task_type, model_params, sample_weight, device, torch_device)
         timing_summary[f'Greedy Search D={D_iter} (Linear)'] = time.time() - t_start_d
 
@@ -515,37 +532,37 @@ def _find_best_models_greedy(sisso_instance, phi_sis_df, y, X_df, D_max, task_ty
              y_pred = model_object.predict(X_current_dim_df)
         
         y_numeric = y.values.flatten()
-        current_target = y_numeric - y_pred
+        current_target = pd.Series(y_numeric - y_pred, index=y.index)
     return models_by_dim
 
 
 def _find_best_models_sisso_pp(sisso_instance, phi_sis_df, y, D_max, task_type,
                                max_feat_cross_corr, sample_weight, device, 
-                               torch_device, **kwargs): # noqa: F401
+                               torch_device, **kwargs):
     """
     Finds models using the SISSO++ breadth-first, QR-accelerated search.
     """
     print("\n" + "="*20 + " Starting SISSO++ (Breadth-First QR) Search " + "="*20)
     xp = np
-    X_data = phi_sis_df.values
     dtype = np.dtype(sisso_instance.dtype).type
     
+    # Prune first, then move data to the selected device
+    phi_pruned = _prune_by_correlation(phi_sis_df, max_feat_cross_corr)
+    feature_names = list(phi_pruned.columns)
+    X_data_cpu = phi_pruned.values.astype(dtype)
+
     if device == 'cuda' and CUPY_AVAILABLE:
         print("  Using CUDA backend for SISSO++ search."); xp = cp
-        X_data = xp.asarray(X_data, dtype=dtype)
+        X_data = xp.asarray(X_data_cpu)
     elif device == 'mps' and TORCH_AVAILABLE:
         print("  Using MPS backend for SISSO++ search."); xp = torch
         torch_dtype = torch.float32 if dtype == np.float32 else torch.float64
-        X_data = torch.from_numpy(X_data).to(torch_device, dtype=torch_dtype)
+        X_data = torch.from_numpy(X_data_cpu).to(torch_device, dtype=torch_dtype)
     else:
         print("  Using CPU (NumPy) backend for SISSO++ search.")
+        X_data = X_data_cpu
 
-    phi_pruned = _prune_by_correlation(phi_sis_df, max_feat_cross_corr)
-    pruned_indices = [phi_sis_df.columns.get_loc(col) for col in phi_pruned.columns]
-    feature_names = list(phi_pruned.columns)
-    
-    X = X_data[:, pruned_indices]
-    n_samples, n_features = X.shape
+    n_samples, n_features = X_data.shape
 
     if task_type in ALL_CLASSIFICATION_TASKS:
         warnings.warn("INFO: For 'sisso++' classification, using OLS on a one-hot encoded target as a proxy for search.")
@@ -558,14 +575,15 @@ def _find_best_models_sisso_pp(sisso_instance, phi_sis_df, y, D_max, task_type,
     else:
         y_proxy_np = y.values.reshape(-1, 1)
 
-    y_proxy = xp.asarray(y_proxy_np, dtype=dtype) if xp != torch else torch.from_numpy(y_proxy_np).to(torch_device, dtype=X.dtype)
+    y_proxy_np = y_proxy_np.astype(dtype)
+    y_proxy = xp.asarray(y_proxy_np) if xp != torch else torch.from_numpy(y_proxy_np).to(torch_device, dtype=X_data.dtype)
 
     fit_intercept = sisso_instance.model_params_.get('fit_intercept', True)
     if fit_intercept:
-        y_mean, X_mean = xp.mean(y_proxy, axis=0), xp.mean(X, axis=0)
-        y_c, X_c = y_proxy - y_mean, X - X_mean
+        y_mean, X_mean = xp.mean(y_proxy, axis=0), xp.mean(X_data, axis=0)
+        y_c, X_c = y_proxy - y_mean, X_data - X_mean
     else:
-        y_c, X_c = y_proxy, X
+        y_c, X_c = y_proxy, X_data
 
     models_by_dim, timing_summary = {}, sisso_instance.timing_summary_
     beam_width = n_features
@@ -596,7 +614,7 @@ def _find_best_models_sisso_pp(sisso_instance, phi_sis_df, y, D_max, task_type,
 
     best_d1_info = best_models_at_level[0]
     final_score, final_model, final_coef = _refit_and_score_final_model(
-        best_d1_info['indices'], phi_pruned.values, y, task_type, sisso_instance.model_params_,
+        best_d1_info['indices'], X_data_cpu, y, task_type, sisso_instance.model_params_,
         sample_weight, device, torch_device, feature_names)
     
     if final_model is not None:
@@ -645,7 +663,7 @@ def _find_best_models_sisso_pp(sisso_instance, phi_sis_df, y, D_max, task_type,
 
         best_d_iter_info = best_models_at_level[0]
         final_score, final_model, final_coef = _refit_and_score_final_model(
-            best_d_iter_info['indices'], phi_pruned.values, y, task_type, sisso_instance.model_params_,
+            best_d_iter_info['indices'], X_data_cpu, y, task_type, sisso_instance.model_params_,
             sample_weight, device, torch_device, feature_names)
         
         if final_model is not None:

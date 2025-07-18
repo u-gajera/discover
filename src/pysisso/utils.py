@@ -1,8 +1,9 @@
 """
-This module provides utility functions for the pySISSO package, including:
-- Plotting functions for visualizing results (CV scores, parity plots, etc.).
-- Functions for saving results to disk (models, data, plots).
-- Functions for formatting and printing symbolic model expressions.
+Assorted helper functions (logging, timing, safe NumPy wrappers, etc.).
+
+Example:
+    with timed_block("descriptor evaluation"):
+        X = safe_eval(exprs, dataframe)
 """
 import numpy as np
 import pandas as pd
@@ -25,10 +26,8 @@ except ImportError:
     SEABORN_AVAILABLE = False
 
 
-# =========================================================================
-#  Plotting
-# =========================================================================
 
+#  Plotting
 def _get_score_label(task_type, loss, selection_method='cv'):
     """Returns a human-readable string for the score metric."""
     if selection_method == 'aic':
@@ -241,11 +240,10 @@ def plot_descriptor_histograms(sisso_instance, X, save_path=None):
     if save_path: plt.savefig(save_path); plt.close(fig)
     return fig
 
-
-# --- NEW: Advanced Interpretation Plots ---
+# --- : Advanced Interpretation Plots ---
 
 def plot_feature_importance(sisso_instance, X, ax=None, save_path=None):
-    """NEW: Plots the scaled importance of each descriptor in the final linear model."""
+    """: Plots the scaled importance of each descriptor in the final linear model."""
     model_info = sisso_instance.models_by_dim_.get(sisso_instance.best_D_)
     if not model_info or 'coef' not in model_info or model_info['coef'] is None:
         print("Plotting: Feature importance plot requires a final linear model with coefficients.")
@@ -279,7 +277,7 @@ def plot_feature_importance(sisso_instance, X, ax=None, save_path=None):
     return fig
 
 def plot_partial_dependence(sisso_instance, X, features_to_plot=None, ax=None, save_path=None, resolution=50):
-    """NEW: Creates a Partial Dependence Plot (PDP) to visualize model response."""
+    """: Creates a Partial Dependence Plot (PDP) to visualize model response."""
     if sisso_instance.best_model_ is None: return None
     is_parametric = hasattr(sisso_instance.best_model_, 'is_parametric') and sisso_instance.best_model_.is_parametric
     if is_parametric:
@@ -346,10 +344,7 @@ def plot_partial_dependence(sisso_instance, X, features_to_plot=None, ax=None, s
     if save_path: plt.savefig(save_path); plt.close(fig)
     return fig
 
-
-# =========================================================================
 # Output / Reporting
-# =========================================================================
 
 def save_results(sisso_instance, X, y, sample_weight):
     """Saves all model results, data, and plots to the specified work directory."""
@@ -454,32 +449,35 @@ def sympy_to_s_expression(expr):
 
 
 def print_descriptor_formula(descriptor_features, coefficients, task_type, fix_intercept,
-                             target_name='y', s_expr_format=False, latex_format=False, model_provider=None, 
-                             coefficients_stderr=None, clean_to_original_map=None):
+                             target_name='y', s_expr_format=False, latex_format=False, pretty_format=False, 
+                             model_provider=None, coefficients_stderr=None, clean_to_original_map=None):
     """
     Formats and prints the symbolic formula for a given model.
-    Now includes LaTeX output functionality and original feature name substitution.
+    Includes pretty-printing for publication-ready text.
     """
     is_parametric = hasattr(model_provider, 'is_parametric') and model_provider.is_parametric
     
     temp_descriptor_features = descriptor_features
     if clean_to_original_map:
-        if is_parametric:
-            if hasattr(model_provider, 'sym_expr'):
-                # Create a local copy to avoid modifying the instance attribute
-                temp_sym_expr = model_provider.sym_expr.subs(clean_to_original_map)
+        if is_parametric and hasattr(model_provider, 'sym_expr'):
+            temp_sym_expr = model_provider.sym_expr.subs(clean_to_original_map)
         else:
             temp_descriptor_features = [f.subs(clean_to_original_map) for f in descriptor_features]
 
     # Handle different output formats
-    formatter = sympy.latex if latex_format else (sympy.pretty if not s_expr_format else None)
-
-    if s_expr_format:
+    if pretty_format:
+        formatter = lambda expr: sympy.pretty(expr, use_unicode=False, full_prec=False).replace('\n', '')
+    elif latex_format:
+        formatter = sympy.latex
+    elif s_expr_format:
         if is_parametric: return sympy_to_s_expression(temp_sym_expr)
         if task_type in ALL_CLASSIFICATION_TASKS:
             return "\n".join([f"# D{i+1}: {sympy_to_s_expression(feat)}" for i, feat in enumerate(temp_descriptor_features)])
         
-        if coefficients is None: return "Model has no coefficients."
+        if coefficients is None:
+            # CORRECTED: Handle case of just printing features
+            formulas = [sympy_to_s_expression(feat) for feat in temp_descriptor_features]
+            return "\n".join(formulas)
         
         n_tasks = coefficients.shape[0] if coefficients.ndim > 1 else 1
         formulas = []
@@ -494,63 +492,64 @@ def print_descriptor_formula(descriptor_features, coefficients, task_type, fix_i
                 formula += sum(sympy.Number(coefs_t[coef_offset + i]) * f for i, f in enumerate(temp_descriptor_features))
             formulas.append(sympy_to_s_expression(formula))
         return "\n".join(formulas)
+    else: # Default: verbose pretty print
+        formatter = lambda expr: sympy.pretty(expr, use_unicode=True)
 
     # Logic for pretty text and LaTeX
     header = "=" * 60
-    output = [f"\n{header}\nFinal Symbolic Model: {task_type}\n{header}"] if not latex_format else []
+    output = [] if (latex_format or pretty_format) else [f"\n{header}\nFinal Symbolic Model: {task_type}\n{header}"]
     
     if is_parametric:
         pretty_expr = formatter(temp_sym_expr)
         output.append(f"{target_name} = {pretty_expr}")
     elif task_type in ALL_CLASSIFICATION_TASKS:
-        desc_strs = [f"  D_{{{i+1}}} = {formatter(f)}" if latex_format else f"  D{i+1} = {formatter(f, use_unicode=True)}" for i, f in enumerate(temp_descriptor_features)]
+        desc_strs = []
+        for i, f in enumerate(temp_descriptor_features):
+             desc_strs.append(f"D{i+1} = {formatter(f)}")
         output.append("Descriptors define the classification space:\n" + "\n".join(desc_strs))
     else:
+        # ** THIS IS THE CORRECTED BLOCK **
         if coefficients is None:
-             output.append("Model has no coefficients.")
-             return "\n".join(output)
+            # Handle the case where we only want to print the feature formula, not a full model.
+            # This is used for the top_sis_candidates.csv file.
+            if len(temp_descriptor_features) == 1:
+                formula_str = formatter(temp_descriptor_features[0])
+                # For latex, we don't need the target name
+                if latex_format:
+                     return formula_str
+                # For other formats, wrap it nicely
+                output.append(f"{target_name} = {formula_str}")
+            else:
+                 output.append("Model features:\n" + "\n".join(f"D{i+1} = {formatter(f)}" for i,f in enumerate(temp_descriptor_features)))
+            return "\n".join(output)
 
         is_multitask = coefficients.ndim > 1 and coefficients.shape[0] > 1
         target_names = target_name if is_multitask and isinstance(target_name, list) else [target_name]
         num_tasks = coefficients.shape[0] if is_multitask else 1
         
         for t_idx in range(num_tasks):
-            formula_parts = []
+            full_model_expr = sympy.Number(0)
             coefs_t = coefficients[t_idx] if num_tasks > 1 else coefficients.flatten()
-            stderr_t = (coefficients_stderr[t_idx] if is_multitask and coefficients_stderr is not None
-                        else coefficients_stderr if not is_multitask and coefficients_stderr is not None else None)
             coef_offset = 0
-
             if not fix_intercept:
-                err_str = f" \\pm {stderr_t[0]:.2g}" if stderr_t is not None and latex_format else (f" \u00B1 {stderr_t[0]:.2g}" if stderr_t is not None else "")
-                formula_parts.append(f"({float(coefs_t[0]):.4f}{err_str})")
+                full_model_expr += sympy.Number(coefs_t[0])
                 coef_offset = 1
             
-            target = target_names[t_idx] if t_idx < len(target_names) else f"task_{t_idx+1}"
+            for i, feature in enumerate(temp_descriptor_features):
+                full_model_expr += sympy.Number(coefs_t[i + coef_offset]) * feature
             
-            if temp_descriptor_features:
-                for i, feature in enumerate(temp_descriptor_features):
-                    feature_str = formatter(feature, mul_symbol='dot') if latex_format else formatter(feature, use_unicode=True).replace('\n', ' ').strip()
-                    err_str = f" \\pm {stderr_t[i + coef_offset]:.2g}" if stderr_t is not None and len(stderr_t) > (i + coef_offset) and latex_format else (f" \u00B1 {stderr_t[i + coef_offset]:.2g}" if stderr_t is not None and len(stderr_t) > (i + coef_offset) else "")
-                    
-                    op_str = " + " if latex_format else " + "
-                    coef_val = float(coefs_t[i + coef_offset])
-                    
-                    if latex_format:
-                        if coef_val < 0: op_str = " - "
-                        coef_val = abs(coef_val)
-                        formula_parts.append(f"{op_str}({coef_val:.4f}{err_str}) \\cdot ({feature_str})")
-                    else:
-                        formula_parts.append(f"({coef_val:+.4f}{err_str}) * ({feature_str})")
+            # Round the coefficients for cleaner output
+            if pretty_format or latex_format:
+                 rounded_expr = full_model_expr.xreplace({n: round(n, 4) for n in full_model_expr.atoms(sympy.Number)})
+            else:
+                 rounded_expr = full_model_expr
+
+            formula_str = formatter(rounded_expr)
+            target = target_names[t_idx] if t_idx < len(target_names) else f"task_{t_idx+1}"
 
             if latex_format:
-                 if fix_intercept:
-                      first_term = formula_parts[0]
-                      formula_parts[0] = first_term.lstrip(" + ")
-                 formula_str = " ".join(formula_parts)
+                output.append(f"${formatter(sympy.Symbol(target))} = {formula_str}$")
             else:
-                 formula_str = ' + '.join(formula_parts).replace('+ -', '- ')
-
-            output.append(f"{target} = {formula_str}")
+                output.append(f"{target} = {formula_str}")
             
     return "\n".join(output).replace('\n\n','\n')

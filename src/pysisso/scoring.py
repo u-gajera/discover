@@ -1,3 +1,4 @@
+
 """
 This module contains all functions related to model evaluation, screening, and
 cross-validation. It includes:
@@ -5,6 +6,14 @@ cross-validation. It includes:
 - Scoring functions for various task types (regression, classification, etc.).
 - GPU-accelerated kernels for Ridge regression.
 - The main cross-validation loop.
+
+Objective functions and ranking helpers.
+
+Provides R², RMSE, MAE, plus tiny wrappers that decide which models are
+“plottable” or “best” at each dimension.
+
+Example:
+    r2, rmse = score_model(y_true, y_pred)
 """
 import numpy as np
 import pandas as pd
@@ -34,19 +43,18 @@ try:
 except ImportError:
     torch = None
 
-
-# =============================================================================
 #  Screening and Scoring
-# =============================================================================
 
 def run_SIS(phi_df, y, task_type, xp=np, multitask_sis_method='average'):
     """
     Performs Sure Independence Screening (SIS) to rank features.
     For multi-task problems, can use simple 'average' correlation or 'cca'.
+
+    as values, sorted in descending order of importance.
     """
     print(f"Running SIS to screen {phi_df.shape[1]} features...")
     if phi_df.empty:
-        return []
+        return pd.Series([], dtype=float) 
 
     # GPU-accelerated path for regression
     if task_type == REGRESSION and xp != np and (xp == cp or xp == torch):
@@ -79,7 +87,7 @@ def run_SIS(phi_df, y, task_type, xp=np, multitask_sis_method='average'):
 
             correlations = pd.Series(correlations_cpu, index=phi_df.columns)
             print(f"  GPU SIS screening complete. Top feature: '{correlations.idxmax()}'")
-            return correlations.dropna().sort_values(ascending=False).index.tolist()
+            return correlations.dropna().sort_values(ascending=False)
         except Exception as e:
             warnings.warn(f"GPU-based SIS failed: {e}. Falling back to CPU-based SIS.")
 
@@ -90,12 +98,12 @@ def run_SIS(phi_df, y, task_type, xp=np, multitask_sis_method='average'):
     elif task_type in ALL_CLASSIFICATION_TASKS:
          try:
             non_constant_cols = phi_df.columns[phi_df.var() > 1e-9]
-            if len(non_constant_cols) == 0: return []
+            if len(non_constant_cols) == 0: return pd.Series([], dtype=float) 
             phi_subset = phi_df[non_constant_cols]
             f_values, _ = f_classif(phi_subset, y)
             correlations = pd.Series(f_values, index=phi_subset.columns).fillna(0).sort_values(ascending=False)
          except ValueError as e:
-             warnings.warn(f"SIS f_classif failed: {e}. Returning empty list."); return []
+             warnings.warn(f"SIS f_classif failed: {e}. Returning empty list."); return pd.Series([], dtype=float) 
     
     elif task_type == MULTITASK:
         y_df = y if isinstance(y, pd.DataFrame) else pd.DataFrame(y, index=phi_df.index)
@@ -126,7 +134,9 @@ def run_SIS(phi_df, y, task_type, xp=np, multitask_sis_method='average'):
 
     if not correlations.empty:
         print(f"  CPU SIS screening complete. Top feature: '{correlations.index[0]}'")
-    return correlations.index.tolist()
+    
+    # Return the full Series
+    return correlations
 
 
 def regression_score(X, y, model_params, sample_weight=None):
@@ -339,9 +349,9 @@ SCORE_FUNCTIONS = {
     CLASSIFICATION_LOGREG: lambda X, y, p, sw: classification_score(X, y, CLASSIFICATION_LOGREG, p, sw),
 }
 
-# =============================================================================
+
 #  Main L0 Search and Cross-Validation
-# =============================================================================
+
 
 def _score_single_model(X_combo_df, y, task_type, model_params, sample_weight, device, torch_device):
     """

@@ -1,9 +1,19 @@
 """
-This module handles all aspects of feature generation and manipulation.
-It includes the unit-aware UFeature class and the core logic for building
-the feature space (phi-space) through iterative application of mathematical
-operators.
+Feature-space construction utilities.
+
+Takes the primary features listed in your CSV and, using a grammar of basic
+operators (+, −, ×, ÷, log, √, etc.), generates the huge pool of candidate
+descriptors examined by SISSO.
+
+Example:
+    Primary features  :  A (lattice constant), B (bulk modulus)
+    Generated pool    :  A+B, A−B, A/B, log(B), √A, (A/B)², …
+
+These symbolic expressions are stored as SymPy trees so they can be manipulated
+and evaluated efficiently.
 """
+
+
 import pandas as pd
 import numpy as np
 import sympy
@@ -11,35 +21,19 @@ from pathlib import Path
 import warnings
 
 from joblib import Memory
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score, mean_squared_error
 
-# Optional CuPy and PyTorch imports for GPU acceleration
+# Optional CuPy and Torch acceleration -----------------------------------------------------------
 try:
     import cupy as cp
     CUPY_AVAILABLE = True
 except ImportError:
     CUPY_AVAILABLE = False
-    class cp:
+    class cp_dummy:
         ndarray = type(None)
-        def asarray(self, arr, **kwargs): return np.asarray(arr, **kwargs)
-        def asnumpy(self, arr): return arr
-        def get_default_memory_pool(self):
-            class DummyPool:
-                def free_all_blocks(self): pass
-            return DummyPool()
-        def finfo(self, dtype): return np.finfo(dtype)
-        def abs(self, arr): return np.abs(arr)
-        def all(self, arr): return np.all(arr)
-        def any(self, arr): return np.any(arr)
-        def min(self, arr): return np.min(arr)
-        def max(self, arr): return np.max(arr)
-        def isfinite(self, arr): return np.isfinite(arr)
-        def sqrt(self, arr): return np.sqrt(arr)
-        def cbrt(self, arr): return np.cbrt(arr)
-        def sign(self, arr): return np.sign(arr)
-        def log(self, arr): return np.log(arr)
-        def exp(self, arr): return np.exp(arr)
-        def sin(self, arr): return np.sin(arr)
-        def cos(self, arr): return np.cos(arr)
+        def asnumpy(self, x): return np.asarray(x)
+    cp = cp_dummy()
 
 try:
     import torch
@@ -55,34 +49,29 @@ except ImportError:
         @staticmethod
         def from_numpy(x): return x
         @staticmethod
-        def tensor(x, **kwargs): return np.array(x, **kwargs)
-        @staticmethod
-        def finfo(dtype):
-            class DummyFinfo:
-                max = np.finfo(np.float64).max
-                min = np.finfo(np.float64).min
-            return DummyFinfo()
+        def cos(arr): return np.cos(arr)
 
-
-# Try to import pint for unit handling
+# Pint -------------------------------------------------------------------------------------------
 try:
     import pint
     PINT_AVAILABLE = True
-    warnings.filterwarnings("ignore", module='pint')
-    pint.UnitRegistry().setup_matplotlib()
 except ImportError:
     PINT_AVAILABLE = False
-    class pint:
-        class DimensionalityError(Exception): pass
-        class UnitRegistry:
-            def __call__(self, unit_str): return 1.0
-            def setup_matplotlib(self): pass
 
-# =============================================================================
-#  Operator Definitions (Including NEW User-Customizable Operators)
-# =============================================================================
+# ------------------------------------------------------------------------------------------------
+# Utility helpers
+# ------------------------------------------------------------------------------------------------
 
-# This dictionary defines non-linear operators that include trainable parameters.
+def _safe_min_max(arr, xp=np):
+    if xp == torch:
+        amax = float(arr.max().item())
+        amin = float(arr.min().item())
+    else:
+        amax = float(xp.max(arr))
+        amin = float(xp.min(arr))
+    return amin, amax
+
+#  Operator Definitions
 PARAMETRIC_OP_DEFS = {
     'exp-': {
         'func': lambda f, p: np.exp(-p[0] * f),
@@ -102,19 +91,14 @@ PARAMETRIC_OP_DEFS = {
         'unit_check': None,
     },
 }
-
-# --- NEW: USER-DEFINED CUSTOM OPERATORS ---
-# Define your own custom operators here. They can be enabled by name in the config.
 CUSTOM_UNARY_OP_DEFS = {
-    # Example 1: A shifted logarithm, log(x+1), useful for features with zeros.
     'log1p': {
-        'func': np.log1p,                               # The numpy function
-        'sym_func': lambda s: sympy.log(s + 1),         # The symbolic equivalent
-        'unit_check': lambda u: u.dimensionless,        # Constraint: must be dimensionless
-        'domain_check': lambda f: np.all(f.values > -1),# Constraint: values must be > -1
-        'name_func': lambda n: f"log1p({n})",            # How to name the new feature
+        'func': np.log1p,
+        'sym_func': lambda s: sympy.log(s + 1),
+        'unit_check': lambda u: u.dimensionless,
+        'domain_check': lambda f: np.all(f.values > -1),
+        'name_func': lambda n: f"log1p({n})",
     },
-    # Example 2: A gaussian-like function without parameters
     'gaussian': {
         'func': lambda x: np.exp(-x**2),
         'sym_func': lambda s: sympy.exp(-s**2),
@@ -123,24 +107,25 @@ CUSTOM_UNARY_OP_DEFS = {
         'name_func': lambda n: f"gaussian({n})",
     }
 }
-
 CUSTOM_BINARY_OP_DEFS = {
-    # Example: The harmonic mean of two features
     'harmonic_mean': {
         'func': lambda f1, f2: 2 * f1 * f2 / (f1 + f2),
         'sym_func': lambda s1, s2: 2 * s1 * s2 / (s1 + s2),
-        'unit_op': lambda u1, u2: u1, # Result has the same unit as the inputs
-        'unit_check': lambda u1, u2: u1.dimensionality == u2.dimensionality, # Must have same units
-        'domain_check': lambda f1, f2: not np.any(np.abs(f1.values + f2.values) < 1e-9), # Avoid division by zero
-        'op_name': "<H>" # Custom name for the operation
+        'unit_op': lambda u1, u2: u1,
+        'unit_check': lambda u1, u2: u1.dimensionality == u2.dimensionality,
+        'domain_check': lambda f1, f2: not np.any(np.abs(f1.values + f2.values) < 1e-9),
+        'op_name': "<H>"
+    },
+    'abs_diff': {
+        'func': lambda f1, f2: np.abs(f1 - f2),
+        'sym_func': lambda s1, s2: sympy.Abs(s1 - s2),
+        'unit_op': lambda u1, u2: u1,
+        'unit_check': lambda u1, u2: u1.dimensionality == u2.dimensionality,
+        'domain_check': None,
+        'op_name': "|-|"
     }
 }
-
-
-# =============================================================================
 #  Feature Generation (with Unit-Awareness and Operator Control)
-# =============================================================================
-
 class UFeature:
     """A wrapper for features that includes name, values, units, symbolic expression, and base features."""
     def __init__(self, name, values, unit, ureg, sym_expr, base_features, xp=np, dtype=np.float64, torch_device=None):
@@ -149,7 +134,7 @@ class UFeature:
         self.torch_device = torch_device
         self.ureg = ureg
         self.sym_expr = sym_expr
-        self.base_features = base_features # NEW: Set of original feature names
+        self.base_features = base_features
 
         vals = values.magnitude if hasattr(values, 'magnitude') else values
         if xp == torch:
@@ -181,7 +166,7 @@ class UFeature:
             new_values = op_func(self.values, other.values)
             new_sym_expr = sym_op_func(self.sym_expr, other.sym_expr)
             new_name = f"({self.name}{op_name}{other.name})"
-            new_base_features = self.base_features.union(other.base_features) # NEW
+            new_base_features = self.base_features.union(other.base_features)
             return UFeature(new_name, new_values, new_unit, self.ureg, new_sym_expr, new_base_features, self.xp, dtype=self.values.dtype, torch_device=self.torch_device)
          except (pint.DimensionalityError, ValueError, TypeError, OverflowError): return None
 
@@ -206,7 +191,7 @@ class UFeature:
             new_unit = unit_op(self.unit) if self.ureg else None
             new_sym_expr = sym_op(self.sym_expr)
             new_name = name_func(self.name)
-            new_base_features = self.base_features # NEW: Unary op doesn't add new base features
+            new_base_features = self.base_features
             return UFeature(new_name, new_values, new_unit, self.ureg, new_sym_expr, new_base_features, self.xp, dtype=self.values.dtype, torch_device=self.torch_device)
         except (ValueError, TypeError, pint.DimensionalityError, OverflowError): return None
 
@@ -236,7 +221,6 @@ class UFeature:
     
     def get_unary_op_func(self, op_name):
         """Returns the function for a given unary operator name."""
-        # This replaces the buggy implementation and makes it easier to call operators by name
         op_map = {
            'sqrt': self.sqrt, 'cbrt': self.cbrt, 'abs': self.abs, 'log': self.log,
            'exp': self.exp, 'exp-': self.exp_neg, 'sin': self.sin, 'cos': self.cos,
@@ -275,6 +259,11 @@ def apply_binary_op(f1, f2, op_name, min_val, max_val):
     try:
         op_method_name = UFeature.get_binary_op_method_name(op_name)
         if not op_method_name: return None
+        
+        # Prevent trivial operations on identical features like f-f=0 or f/f=1.
+        if op_method_name in ['__sub__', '__truediv__'] and f1.sym_expr == f2.sym_expr:
+            return None
+
         new_feat = getattr(f1, op_method_name)(f2)
 
         if new_feat and new_feat.xp.all(new_feat.xp.isfinite(new_feat.values)):
@@ -283,8 +272,6 @@ def apply_binary_op(f1, f2, op_name, min_val, max_val):
                 return None
             if new_feat.xp.all(abs_vals < 1e-9): return None
             if new_feat.xp.max(new_feat.values) - new_feat.xp.min(new_feat.values) < 1e-9: return None
-            if (op_method_name == '__sub__' and f1.sym_expr == f2.sym_expr) or \
-               (op_method_name == '__truediv__' and f1.sym_expr == f2.sym_expr) : return None
             return new_feat.sym_expr, new_feat
     except Exception: pass
     return None
@@ -340,185 +327,320 @@ def apply_parametric_op(feature, op_def, min_val, max_val):
     except Exception:
         return None
 
-_cached_feature_generator = None
-def get_cached_generator(workdir):
-    """Initializes and returns a joblib.Memory object for caching feature generation."""
-    global _cached_feature_generator
-    if workdir and _cached_feature_generator is None:
-        cache_path = Path(workdir) / "feature_cache"
-        cache_path.mkdir(exist_ok=True, parents=True)
-        print(f"[Cache] Feature generation cache enabled at: {cache_path}")
-        memory = Memory(cache_path, verbose=0)
-        _cached_feature_generator = memory.cache(generate_features_with_units_core)
-    elif _cached_feature_generator:
-        return _cached_feature_generator
-    return generate_features_with_units_core
-
-def generate_features_with_units(X, primary_units, depth, n_jobs, use_cache, workdir,
-                                 op_rules, parametric_ops, min_abs_feat_val, max_abs_feat_val,
-                                 interaction_only, xp, dtype, torch_device):
-    """
-    Wrapper for the core feature generation function that handles caching.
-    """
-    if use_cache:
-        generator = get_cached_generator(workdir)
-        # The core function expects positional arguments based on the DataFrame's components.
-        X_cols = X.columns
-        X_values = tuple(map(tuple, X.values))
-        
-        primary_units_tuple = tuple(sorted(primary_units.items()))
-        # Convert op_rules to a hashable format for caching
-        op_rules_tuple = tuple(tuple(sorted(d.items())) for d in op_rules)
-        parametric_ops_tuple = tuple(sorted(parametric_ops))
-
-        return generator(X_cols, X_values, primary_units_tuple, depth, n_jobs,
-                         op_rules_tuple, parametric_ops_tuple, min_abs_feat_val, max_abs_feat_val,
-                         interaction_only, xp, dtype, workdir, torch_device)
-    else:
-        # The direct call also passes components, not the whole DataFrame.
-        return generate_features_with_units_core(X.columns, X.values, tuple(sorted(primary_units.items())),
-                                                 depth, n_jobs, op_rules, tuple(sorted(parametric_ops)),
-                                                 min_abs_feat_val, max_abs_feat_val,
-                                                 interaction_only, xp, dtype, workdir, torch_device)
-
 def _canonicalize_expr(expr):
-    """Converts a sympy expression to a canonical form for robust duplicate checking."""
+    """Return a canonical SymPy expression for duplicate detection.
+
+    Key rewrites (safe for real symbols):
+    - sqrt(x**2)        -> Abs(x)
+    - x**2/sqrt(x**2)   -> Abs(x)
+    - Abs(x)**2/Abs(x)  -> Abs(x)
+
+    We *do not* drop Abs(x) unless domain metadata elsewhere guarantees positivity.
+    """
     try:
-        return sympy.simplify(expr)
-    except (TypeError, ValueError, Exception):
+        e = expr
+
+        # sqrt(x**2) -> Abs(x)
+        def _sq_pow_to_abs(ex):
+            if ex.is_Pow and ex.exp == sympy.Rational(1, 2):
+                base = ex.base
+                if base.is_Pow and base.exp == 2:
+                    return sympy.Abs(base.base)
+            return ex
+        e = e.replace(_sq_pow_to_abs)
+
+        # x**2/sqrt(x**2) -> Abs(x)
+        def _x2_over_sqrtx2(ex):
+            if ex.is_Mul and len(ex.args) == 2:
+                a, b = ex.args
+                if a.is_Pow and a.exp == 2 and b.is_Pow and b.exp == -sympy.Rational(1, 2):
+                    bb = b.base
+                    if bb.is_Pow and bb.exp == 2 and bb.base == a.base:
+                        return sympy.Abs(a.base)
+            return ex
+        e = e.replace(_x2_over_sqrtx2)
+
+        # Abs(x)**2/Abs(x) -> Abs(x)
+        def _abs2_over_abs(ex):
+            if ex.is_Mul and len(ex.args) == 2:
+                a, b = ex.args
+                if a.is_Pow and a.base.func is sympy.Abs and a.exp == 2 and b.is_Pow and b.exp == -1 and b.base.func is sympy.Abs:
+                    if a.base.args[0] == b.base.args[0]:
+                        return sympy.Abs(a.base.args[0])
+            return ex
+        e = e.replace(_abs2_over_abs)
+
+        # generic cleanup
+        e = sympy.powdenest(sympy.simplify(e), force=True)
+        e = sympy.simplify(e)
+        return e
+    except Exception:  # fall back silently
         return expr
 
-def generate_features_with_units_core(X_cols, X_values, primary_units_tuple, depth, n_jobs,
-                                      op_rules_tuple, parametric_ops_tuple, min_abs_feat_val, max_abs_feat_val,
-                                      interaction_only, xp, dtype, workdir, torch_device):
-    """
-    The core engine for generating the feature space (phi-space).
-    This version includes advanced operator rules and interaction-only mode.
-    """
-    X = pd.DataFrame(X_values, columns=X_cols)
-    primary_units = dict(primary_units_tuple)
-    # Convert op_rules back from tuple if it was cached
-    op_rules = [dict(rule) for rule in op_rules_tuple] if isinstance(op_rules_tuple[0], tuple) else op_rules_tuple
-    parametric_ops = list(parametric_ops_tuple)
+# --- Numeric duplicate utilities ----------------------------------------------------------------
 
+def _values_to_numpy(v):
+    """Return a CPU NumPy array view/copy of values from np/cp/torch."""
+    if CUPY_AVAILABLE and isinstance(v, cp.ndarray):
+        return cp.asnumpy(v)
+    if TORCH_AVAILABLE and isinstance(v, torch.Tensor):
+        return v.detach().cpu().numpy()
+    return np.asarray(v)
+
+
+def _is_numerically_duplicate(new_feat, existing_feats, tol=1e-12):
+    """True if *new_feat* is numerically identical (within tol) to any in *existing_feats*."""
+    nv = _values_to_numpy(new_feat.values)
+    for ef in existing_feats:
+        ev = _values_to_numpy(ef.values)
+        if nv.shape != ev.shape:
+            continue
+        if np.allclose(nv, ev, rtol=tol, atol=tol, equal_nan=True):
+            return True
+    return False
+
+# ------------------------------------------------------------------------------------------------
+# Core iterative generator (patched sections marked)
+# ------------------------------------------------------------------------------------------------
+
+def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis_iter,
+                                  sis_score_degeneracy_epsilon,
+                                  n_jobs, use_cache, workdir, op_rules, parametric_ops,
+                                  min_abs_feat_val, max_abs_feat_val, interaction_only,
+                                  task_type, multitask_sis_method,
+                                  unary_rungs=1, xp=np, dtype=np.float64, torch_device=None):
+    """Breadth-first SIS-driven feature generator (feature-space only)."""
+    from .scoring import run_SIS  # local import to avoid circular
+
+    # --- Setup --------------------------------------------------------------------------------------------------
     ureg = None
     if PINT_AVAILABLE:
         ureg = pint.UnitRegistry()
-        if 'electron_volt' not in ureg: ureg.define('electron_volt = 1.602176634e-19 * joule = eV')
+        if 'electron_volt' not in ureg:
+            ureg.define('electron_volt = 1.602176634e-19 * joule = eV')
     elif primary_units:
         warnings.warn("Pint not available. Generating features without unit checks.")
 
-    clean_names = [f'f{i}' for i in range(len(X.columns))]
+    clean_names = [f"f{i}" for i in range(len(X.columns))]
     primary_symbols = [sympy.Symbol(s, real=True) for s in clean_names]
     original_symbols = [sympy.Symbol(c, real=True) for c in X.columns]
     clean_to_original_map = dict(zip(primary_symbols, original_symbols))
-    X.columns = clean_names
-    
+    X_clean = X.copy(); X_clean.columns = clean_names
+
+    # build rung-0 features --------------------------------------------------------------------------------------
     initial_features = []
     if not primary_units: primary_units = {}
-
-    for i, name in enumerate(X.columns):
+    for i, name in enumerate(X_clean.columns):
         original_name = str(original_symbols[i])
         unit = primary_units.get(original_name, 'dimensionless' if ureg else None)
         if original_name not in primary_units and ureg:
             warnings.warn(f"No unit defined for '{original_name}'. Treating as dimensionless.")
-        # NEW: base_features set is initialized with the original feature name
-        initial_features.append(UFeature(original_name, X[name].values, unit, ureg, primary_symbols[i], {original_name}, xp, dtype, torch_device))
+        initial_features.append(UFeature(original_name, X_clean[name].values, unit, ureg,
+                                         primary_symbols[i], {original_name}, xp, dtype, torch_device))
 
     device_name = "CPU"
     if xp == cp: device_name = "NVIDIA GPU"
     if xp == torch and torch_device is not None: device_name = "Apple/MPS GPU"
-    print(f"\nStarting {'unit-aware' if ureg else ''} feature generation on {device_name} to depth {depth}...")
-    print(f"  Using {len(op_rules)} operator rules. Interaction-only mode: {'ON' if interaction_only else 'OFF'}")
-    if parametric_ops:
-        print(f"  Including in-tree parametric operators: {parametric_ops}")
+    print(f"\nStarting iterative feature generation on {device_name} to depth {depth}...")
+    print(f"  Keeping top {n_features_per_sis_iter} features per iteration.")
 
-    canonical_features = {_canonicalize_expr(feat.sym_expr): feat for feat in initial_features}
+    # canonical map of currently retained features ---------------------------------------------------------------
+    candidate_features_map = {_canonicalize_expr(feat.sym_expr): feat for feat in initial_features}
     last_level_features = initial_features
 
-    # Get all available operator names/definitions
     BUILTIN_UNARY_NAMES = UFeature.get_all_unary_op_names()
     BUILTIN_BINARY_NAMES = UFeature.get_all_binary_op_names()
 
     for d in range(1, depth + 1):
-        print(f"  Depth {d}: Combining {len(last_level_features)} features from previous level...")
+        print(f"\n  Depth {d}: Generating new features...")
         newly_added_this_level = []
 
-        # --- Unary and Parametric Operations ---
-        if not interaction_only:
+        # --- Unary ops -----------------------------------------------------------------------------------------
+        apply_unary_now = (not interaction_only) and (d <= unary_rungs)
+        if apply_unary_now:
             for f in last_level_features:
                 for rule in op_rules:
                     op_name = rule['op']
-                    
-                    # NEW: Check operator constraints against the feature's base components
-                    if 'exclude_features' in rule:
-                        if not f.base_features.isdisjoint(set(rule['exclude_features'])):
-                            continue # Skip this operator for this feature
-                    
+                    if 'exclude_features' in rule and not f.base_features.isdisjoint(set(rule['exclude_features'])):
+                        continue
                     res = None
-                    # Try built-in, custom, and parametric unary operators
                     if op_name in BUILTIN_UNARY_NAMES:
                         op_func = f.get_unary_op_func(op_name)
-                        if op_func: res = apply_op(f, op_func, min_abs_feat_val, max_abs_feat_val)
+                        if op_func:
+                            res = apply_op(f, op_func, min_abs_feat_val, max_abs_feat_val)
                     elif op_name in CUSTOM_UNARY_OP_DEFS:
                         op_def = CUSTOM_UNARY_OP_DEFS[op_name]
-                        op_func = lambda: f._apply_unary_op(op_def['func'], op_def.get('unit_op', lambda u: u), op_def['sym_func'], op_def['name_func'], op_def.get('unit_check'), op_def.get('domain_check'))
+                        op_func = lambda: f._apply_unary_op(op_def['func'], op_def.get('unit_op', lambda u: u),
+                                                            op_def['sym_func'], op_def['name_func'],
+                                                            op_def.get('unit_check'), op_def.get('domain_check'))
                         res = apply_op(f, op_func, min_abs_feat_val, max_abs_feat_val)
                     elif op_name in parametric_ops and op_name in PARAMETRIC_OP_DEFS:
-                         res = apply_parametric_op(f, PARAMETRIC_OP_DEFS[op_name], min_abs_feat_val, max_abs_feat_val)
+                        res = apply_parametric_op(f, PARAMETRIC_OP_DEFS[op_name], min_abs_feat_val, max_abs_feat_val)
 
                     if res:
                         expr, feat = res
                         simplified_expr = _canonicalize_expr(expr)
-                        if not simplified_expr.is_Number and simplified_expr not in canonical_features:
-                            canonical_features[simplified_expr] = feat
-                            newly_added_this_level.append(feat)
+                        if not simplified_expr.is_Number:
+                            # PATCH: numeric duplicate guard -----------------------------------------------------
+                            if (simplified_expr not in candidate_features_map and
+                                not _is_numerically_duplicate(feat, candidate_features_map.values())):
+                                candidate_features_map[simplified_expr] = feat
+                                newly_added_this_level.append(feat)
 
-        # --- Binary Operations ---
-        all_features_list = list(canonical_features.values())
+        # --- Binary ops ----------------------------------------------------------------------------------------
+        all_candidate_features_list = list(candidate_features_map.values())
         for f1 in last_level_features:
-            for f2 in all_features_list:
+            for f2 in all_candidate_features_list:
                 for rule in op_rules:
                     op_name = rule['op']
                     
-                    # NEW: Check operator constraints
+                    # Skip degenerate self-combos for add/sub
+                    if f1 is f2 and op_name in ('add', 'sub'):
+                        continue
+                        
+                    # Skip degenerate additive/subtractive combos that don't expand the base variable set
+                    if op_name in ('add', 'sub'):
+                        union_size = len(f1.base_features | f2.base_features)
+                        max_size   = max(len(f1.base_features), len(f2.base_features))
+                        if union_size == max_size:
+                            continue  # no new variable introduced; just rescales an existing linear combo
+                            
                     if 'exclude_features' in rule:
                         excluded = set(rule['exclude_features'])
                         if not f1.base_features.isdisjoint(excluded) or not f2.base_features.isdisjoint(excluded):
                             continue
-                    
                     res = None
                     if op_name in BUILTIN_BINARY_NAMES:
-                         if op_name in ['add', 'mul'] and id(f1) < id(f2): continue
-                         res = apply_binary_op(f1, f2, op_name, min_abs_feat_val, max_abs_feat_val)
+                        # PATCH: deterministic commutative pruning -------------------------------------------
+                        if op_name in ['add', 'mul'] and f2.name < f1.name:
+                            continue
+                        res = apply_binary_op(f1, f2, op_name, min_abs_feat_val, max_abs_feat_val)
                     elif op_name in CUSTOM_BINARY_OP_DEFS:
-                         if id(f1) < id(f2): continue
-                         res = apply_custom_binary_op(f1, f2, CUSTOM_BINARY_OP_DEFS[op_name], min_abs_feat_val, max_abs_feat_val)
-                    
+                        # assume custom binary ops commutative unless flagged otherwise
+                        if f2.name < f1.name:
+                            continue
+                        res = apply_custom_binary_op(f1, f2, CUSTOM_BINARY_OP_DEFS[op_name], min_abs_feat_val, max_abs_feat_val)
                     if res:
                         expr, feat = res
                         simplified_expr = _canonicalize_expr(expr)
-                        if not simplified_expr.is_Number and simplified_expr not in canonical_features:
-                            canonical_features[simplified_expr] = feat
-                            newly_added_this_level.append(feat)
+                        if not simplified_expr.is_Number:
+                            if (simplified_expr not in candidate_features_map and
+                                not _is_numerically_duplicate(feat, candidate_features_map.values())):
+                                candidate_features_map[simplified_expr] = feat
+                                newly_added_this_level.append(feat)
 
+        print(f"    Generated {len(newly_added_this_level)} new unique features. Total candidates: {len(candidate_features_map)}")
         if not newly_added_this_level:
-            print(f"  No new unique features generated at depth {d}. Stopping.")
+            print("  No new valid features could be generated. Stopping iteration.")
             break
-        last_level_features = newly_added_this_level
-        print(f"  Depth {d}: Added {len(newly_added_this_level)} new unique features. Total unique: {len(canonical_features)}")
 
-    all_final_features = list(canonical_features.values())
-    
-    def to_cpu(arr):
+        # --- SIS screening -------------------------------------------------------------------------------------
+        print(f"  Screening and pruning {len(candidate_features_map)} candidates...")
+
+        def to_cpu(arr):
+            if CUPY_AVAILABLE and isinstance(arr, cp.ndarray): return cp.asnumpy(arr)
+            if TORCH_AVAILABLE and isinstance(arr, torch.Tensor): return arr.cpu().numpy()
+            return arr
+
+        temp_values_dict = {
+            str(_canonicalize_expr(expr)): to_cpu(feat.values)
+            for expr, feat in candidate_features_map.items()
+        }
+        temp_phi_df = pd.DataFrame(temp_values_dict, index=X.index)
+
+        # Create a map from the string-canonical name to the sympy expression for reporting
+        string_to_sym_expr_map = {str(_canonicalize_expr(v.sym_expr)): v.sym_expr for k, v in candidate_features_map.items()}
+
+        sorted_scores_series = run_SIS(temp_phi_df, y, task_type, xp=xp, multitask_sis_method=multitask_sis_method)
+
+        # --- Diagnostics: top-5 1D fits -----------------------------------------------------------------------
+        if task_type == 'regression' and not sorted_scores_series.empty:
+            print("    ------------------ Top 5 SIS Candidates (1D Model Performance) ------------------")
+            print(f"    {'Rank':<5} | {'Correlation':<12} | {'R2 Score':<12} | {'RMSE':<12} | {'Feature Formula':<50}")
+            print(f"    {'-'*5} | {'-'*12} | {'-'*12} | {'-'*12} | {'-'*50}")
+            n_to_report = min(5, len(sorted_scores_series))
+            for i in range(n_to_report):
+                feat_name = sorted_scores_series.index[i]
+                corr_score = sorted_scores_series.iloc[i]
+                X_feat = temp_phi_df[[feat_name]]
+                
+                # Get the pretty formula with original feature names
+                pretty_formula = feat_name # fallback
+                sym_expr = string_to_sym_expr_map.get(feat_name)
+                if sym_expr:
+                    subst_expr = sym_expr.subs(clean_to_original_map)
+                    # Use sympy.sstr for a compact, single-line representation
+                    pretty_formula = sympy.sstr(subst_expr, full_prec=False)
+                
+                try:
+                    model = LinearRegression(); model.fit(X_feat, y); y_pred = model.predict(X_feat)
+                    r2 = r2_score(y, y_pred); rmse = np.sqrt(mean_squared_error(y, y_pred))
+                    print(f"    {i+1:<5} | {corr_score:<12.4f} | {r2:<12.4f} | {rmse:<12.4f} | {pretty_formula:<50}")
+                except Exception:
+                    print(f"    {i+1:<5} | {corr_score:<12.4f} | {'N/A':<12} | {'N/A':<12} | {pretty_formula:<50}")
+            print("    -----------------------------------------------------------------------------------")
+
+
+        if not isinstance(sorted_scores_series, pd.Series) or sorted_scores_series.empty:
+            print("  SIS screening returned no features. Stopping."); break
+
+        # keep top-k + degeneracy ------------------------------------------------------------------------------
+        if len(sorted_scores_series) <= n_features_per_sis_iter:
+            top_k_names = sorted_scores_series.index.tolist()
+        else:
+            score_at_k = sorted_scores_series.iloc[n_features_per_sis_iter - 1]
+            score_threshold = score_at_k - sis_score_degeneracy_epsilon
+            qualifying_features = sorted_scores_series[sorted_scores_series >= score_threshold]
+            top_k_names = qualifying_features.index.tolist()
+            if len(top_k_names) > n_features_per_sis_iter:
+                print(f"    (Kept {len(top_k_names) - n_features_per_sis_iter} additional features due to score degeneracy)")
+
+        # Within top-k, remove near-numerical duplicates -------------------------------------------------------
+        if len(top_k_names) > 1:
+            print(f"    Filtering {len(top_k_names)} top-scoring features to remove redundancies.")
+            corr_matrix = temp_phi_df[top_k_names].corr().abs()
+            upper_tri = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
+            # cluster keep-one
+            keep, seen = [], set()
+            for col in top_k_names:
+                if col in seen: continue
+                keep.append(col); seen.add(col)
+                # Use .loc to avoid potential ambiguity with integer-named columns
+                dupes = upper_tri.index[upper_tri.loc[:, col] > 0.999].tolist()
+                seen.update(dupes)
+            if len(keep) < len(top_k_names):
+                print(f"    Removed {len(top_k_names) - len(keep)} redundant features. Kept {len(keep)}.")
+            top_k_names = keep
+
+        # prune candidate map to survivors ---------------------------------------------------------------------
+        pruned_map = {}
+        for expr, feat in candidate_features_map.items():
+            if str(_canonicalize_expr(expr)) in top_k_names:
+                pruned_map[_canonicalize_expr(expr)] = feat
+        
+        surviving_new_features = []
+        pruned_expressions = {str(e) for e in pruned_map.keys()}
+        for feat in newly_added_this_level:
+            if str(_canonicalize_expr(feat.sym_expr)) in pruned_expressions:
+                surviving_new_features.append(feat)
+
+        candidate_features_map = pruned_map
+        last_level_features = surviving_new_features
+        print(f"    Pruned feature space to {len(candidate_features_map)} candidates.")
+        if not surviving_new_features and d > 0:
+            print("  No newly generated features survived this screening round. Stopping iteration."); break
+        if d < depth:
+            print(f"    {len(last_level_features)} features (survivors from this depth) will form the basis for depth {d+1}.")
+
+    # finalize --------------------------------------------------------------------------------------------------
+    print("\nIterative feature generation complete.")
+    final_features_list = list(candidate_features_map.values())
+    # canonical names for DataFrame columns
+    def _to_cpu(arr):
         if CUPY_AVAILABLE and isinstance(arr, cp.ndarray): return cp.asnumpy(arr)
         if TORCH_AVAILABLE and isinstance(arr, torch.Tensor): return arr.cpu().numpy()
         return arr
-
-    values_dict = {str(feat.sym_expr): to_cpu(feat.values) for feat in all_final_features}
+    values_dict = {str(_canonicalize_expr(feat.sym_expr)): _to_cpu(feat.values) for feat in final_features_list}
     feature_df = pd.DataFrame(values_dict)
-
-    print(f"Φ-Space generation complete. Total valid, unique features: {len(all_final_features)}")
-    sym_map = {str(feat.sym_expr): feat.sym_expr for feat in all_final_features}
-    
+    sym_map = {str(_canonicalize_expr(feat.sym_expr)): _canonicalize_expr(feat.sym_expr) for feat in final_features_list}
     return feature_df.dropna(axis=1), sym_map, clean_to_original_map
