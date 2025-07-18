@@ -1,0 +1,81 @@
+{
+  "//": "==========================================================================",
+  "//": "      CONFIGURATION FOR THE PROVIDED MATERIALS SCIENCE DATASET (train.xlsx) ",
+  "//": "============================================================================",
+
+  "//": "===================================================================",
+  "//": "                       1. DATA & I/O SETTINGS                        ",
+  "//": "===================================================================",
+  
+  "data_file":               "train.csv",
+  "property_key":            "property",
+  "non_feature_cols": [
+    "materials"
+  ],
+  "workdir":                 "mohsen_data",
+  "save_feature_space":      true,
+  "use_cache":               true,
+
+  "//": "===================================================================",
+  "//": "                  2. FEATURE-SPACE CONSTRUCTION                    ",
+  "//": "===================================================================",
+
+  "depth":                   2,
+  "op_rules": [
+    {"op": "add"}, {"op": "sub"}, {"op": "mul"}, {"op": "div"},
+    {"op": "inv"}, {"op": "abs"}, {"op": "sq"}, {"op": "sqrt"}
+  ],
+  "parametric_ops":          [],
+  "interaction_only":        false,
+  "min_abs_feat_val":        1e-50,
+  "max_abs_feat_val":        1e+50,
+  "primary_units": {
+    "E": "electron_volt",
+    "E_tet": "electron_volt",
+    "E_oct": "electron_volt",
+    "A": "angstrom",
+    "B": "angstrom",
+    "C": "angstrom",
+    "Cation": "angstrom",
+    "Metal": "angstrom",
+    "Anion": "electron_volt",
+    "U": "angstrom",
+    "ELN_A": "dimensionless",
+    "ELN_B": "dimensionless",
+    "ELN_X": "dimensionless",
+    "DELNAX": "dimensionless",
+    "DELNBX": "dimensionless",
+    "R_AX": "angstrom",
+    "R_BX": "angstrom",
+    "U_emp": "electron_volt",
+    "E_site": "electron_volt",
+    "oxidation_state": "dimensionless",
+    "E_metal": "electron_volt",
+    "OCV": "volt"
+  },
+
+  "//": "===================================================================",
+  "//": "                   3. SEARCH & SELECTION STRATEGY                    ",
+  "//": "===================================================================",
+  
+  "max_D":                   3,
+  "sis_sizes":               [50],
+  "search_strategy":         "omp",
+  "max_feat_cross_correlation": 0.95,
+
+  "//": "===================================================================",
+  "//": "                 4. MODEL CONSTRUCTION & VALIDATION                  ",
+  "//": "===================================================================",
+  
+  "task_type":               "regression",
+  "selection_method":        "cv",
+  "cv":                      5,
+  "fix_intercept":           false,
+
+  "//": "===================================================================",
+  "//": "                       5. COMPUTATIONAL SETTINGS                     ",
+  "//": "===================================================================",
+
+  "n_jobs":                  -1,
+  "random_state":            42
+}

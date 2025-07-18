@@ -1,28 +1,16 @@
 """
-================================================================================
-  Universal Runner for the Python Sure Independence Screening and
-                       Sparsifying Operator (pySISSO)
-================================================================================
+CLI driver that glues everything together.
 
-This script serves as the main entry point for running pySISSO. It is designed
-to be generic and controlled entirely by a configuration file.
+Typical session:
+    $ python run_sisso.py config_mohsen.json
+    ├── Builds feature pool
+    ├── Runs SIS + SO loops up to D_max
+    └── Writes results:  final_models_summary.json, top_sis_candidates.csv, …
 
-HOW TO RUN:
-
-1. With your own configuration file:
-   ---------------------------------
-   Create a config.json file and run:
-   python run_sisso.py your_config.json
-
-2. As a self-contained demo (no arguments needed):
-   ----------------------------------------------
-   Run the script without any arguments:
-   python run_sisso.py
-
-   This will create 'demo_data.csv' and 'demo_config.json' (if they don't exist)
-   and run a sample analysis using the robust OMP solver.
-
+Example config entry:
+    "max_dimension": 3    # search descriptors up to 3 terms
 """
+
 import pandas as pd
 import json
 import argparse
@@ -30,6 +18,7 @@ import shutil
 from pathlib import Path
 import sys
 import numpy as np
+import sympy
 
 # This setup assumes the script is run from the project directory
 # and the package is in `src/pysisso`.
@@ -39,8 +28,13 @@ from pysisso import (
     SISSORegressor,
     SISSOClassifier,
     SISSOLogRegressor,
-    SISSOCHClassifier
+    SISSOCHClassifier,
+    print_descriptor_formula # Import the formatter
 )
+from pysisso.features import generate_features_iteratively # Need to import this for the return type
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score, mean_squared_error
+
 
 def run_analysis(config_path):
     """Core logic to run SISSO based on a config file."""
@@ -48,7 +42,6 @@ def run_analysis(config_path):
     print(f"--- Loading configuration from '{config_path}' ---")
     try:
         with open(config_path, 'r') as f:
-            # Strip comments (lines starting with //) before parsing JSON
             lines = [line for line in f if not line.strip().startswith('//')]
             config = json.loads("".join(lines))
     except (json.JSONDecodeError, FileNotFoundError) as e:
@@ -56,11 +49,13 @@ def run_analysis(config_path):
         return
 
     # --- 2. Prepare Directories ---
-    workdir = config.get('workdir', 'sisso_output')
-    if Path(workdir).exists():
+    workdir = Path(config.get('workdir', 'sisso_output'))
+    if workdir.exists():
         if input(f"Workdir '{workdir}' already exists. Overwrite? (y/N): ").lower() != 'y':
             print("Aborting."); return
         shutil.rmtree(workdir)
+    
+    workdir.mkdir(parents=True, exist_ok=True) # Ensure workdir is created
 
     # --- 3. Load and Preprocess Data ---
     data_file = config.get('data_file')
@@ -68,28 +63,41 @@ def run_analysis(config_path):
         raise FileNotFoundError(f"Data file '{data_file}' specified in config not found.")
     
     print(f"--- Loading data from '{data_file}' ---")
-    data = pd.read_csv(data_file)
     
-    initial_rows = len(data)
-    data.dropna(inplace=True)
-    if len(data) < initial_rows:
-        print(f"--- Dropped {initial_rows - len(data)} rows with missing values. ---")
-    
-    # --- 4. Define Target and Features based on Config ---
+    try:
+        data_path = Path(data_file)
+        if data_path.suffix == '.csv':
+            data = pd.read_csv(data_path)
+        else:
+            raise ValueError(f"Unsupported data file format: '{data_path.suffix}'. Please use .csv.")
+    except Exception as e:
+        print(f"Pandas failed to read the data file. Error: {e}")
+        return
+
+    print("\n" + "="*20 + " DEBUGGING INFO: STAGE 1 (Raw Data) " + "="*20)
+    print("Shape of data immediately after loading:", data.shape)
+    print("First 5 rows of loaded data:\n", data.head())
+    print("\nChecking for ALL missing values (NaNs) in each column of raw data:")
+    print(data.isnull().sum())
+    print("="*68 + "\n")
+
     prop_key = config.get('property_key')
     if not prop_key or prop_key not in data.columns:
-        raise ValueError(f"Config 'property_key' '{prop_key}' not found in data columns.")
+        raise ValueError(f"Config 'property_key' '{prop_key}' not found in data columns. Available columns: {data.columns.tolist()}")
     
     non_feature_cols = config.get('non_feature_cols', [])
-    
-    y = data[prop_key]
     feature_cols = [c for c in data.columns if c not in [prop_key] + non_feature_cols]
-    X_raw = data[feature_cols]
     
-    # One-hot encode categorical features (if any)
+    used_cols = [prop_key] + feature_cols
+    data_subset = data[used_cols].dropna()
+
+    if data_subset.empty:
+        print("\nFATAL: DataFrame is empty after dropping rows with missing values.")
+        return
+
+    y = data_subset[prop_key]
+    X_raw = data_subset[feature_cols]
     X = pd.get_dummies(X_raw, dummy_na=False, drop_first=False)
-    if X.shape[1] > X_raw.shape[1]:
-        print(f"--- Performed one-hot encoding. Feature set expanded from {X_raw.shape[1]} to {X.shape[1]} features. ---")
 
     print(f"\nTarget property: '{prop_key}'")
     print(f"Final primary features ({len(X.columns)}) being used for this run:\n  {', '.join(X.columns)}")
@@ -101,12 +109,9 @@ def run_analysis(config_path):
         'ch_classification': SISSOCHClassifier, 'convex_hull': SISSOCHClassifier,
         'classification': SISSOClassifier,
     }
-    # Use 'task_type' or the legacy 'calc_type' key for backward compatibility
     task_key = config.get('task_type', config.get('calc_type', 'regression')).lower()
     SissoClass = task_map.get(task_key)
-    if SissoClass is None:
-        raise ValueError(f"Unknown 'task_type' or 'calc_type' in config: {task_key}")
-
+    
     print("\n--- Initializing and running SISSO ---")
     sisso = SissoClass(**config)
     
@@ -114,76 +119,102 @@ def run_analysis(config_path):
         sisso.fit(X, y)
     except (ImportError, ValueError, RuntimeError) as e:
         print(f"\nFATAL ERROR during SISSO fit: {e}")
-        print("Please check your configuration and dependencies (e.g., gurobipy for MIQP).")
         return
 
-    # --- 6. Print Final Summary ---
+    # --- 6. Save Additional, Plot-Friendly Results ---
+    print("\n--- Saving additional results for plotting ---")
+
+    # --- A. Save Top SIS Candidates ---
+    sis_candidates_data = []
+    feature_space_df = sisso.feature_space_df_
+    
+    print(f"  Evaluating top {min(20, feature_space_df.shape[1])} features from final feature space...")
+    correlations = feature_space_df.corrwith(y).abs().sort_values(ascending=False)
+    top_n_to_eval = min(20, len(correlations))
+    
+    for i in range(top_n_to_eval):
+        feat_name = correlations.index[i]
+        corr_score = correlations.iloc[i]
+        X_feat = feature_space_df[[feat_name]]
+        
+        try:
+            model = LinearRegression().fit(X_feat, y)
+            y_pred = model.predict(X_feat)
+            r2 = r2_score(y, y_pred)
+            rmse = np.sqrt(mean_squared_error(y, y_pred))
+            
+            sym_expr = sisso.feature_space_sym_map_.get(feat_name)
+            formula = feat_name
+            if sym_expr:
+                full_formula_str = print_descriptor_formula(
+                    [sym_expr], 
+                    None,
+                    'regression', 
+                    True,
+                    clean_to_original_map=sisso.sym_clean_to_original_map_
+                )
+                formula = full_formula_str.split("=")[-1].strip()
+
+            sis_candidates_data.append({
+                'Rank': i + 1, 'Feature': formula,
+                'Internal_Name': feat_name,
+                'Internal_Sym_Expr': str(sym_expr),
+                'Correlation': corr_score, 'R2_Score': r2, 'RMSE': rmse
+            })
+        except Exception:
+            continue
+            
+    sis_df = pd.DataFrame(sis_candidates_data)
+    sis_candidates_path = workdir / "top_sis_candidates.csv"
+    sis_df.to_csv(sis_candidates_path, index=False, float_format="%.5f")
+    print(f"  Saved top SIS candidates to '{sis_candidates_path}'")
+
+    # --- B. Save Final SISSO Models Summary ---
+    models_summary = []
+    fix_intercept = config.get('fix_intercept', False)
+    
+    for D, model_data in sisso.models_by_dim_.items():
+        is_plottable = (model_data.get('coef') is not None) and (not model_data.get('is_parametric', False))
+        
+        coef_list = None
+        if is_plottable and model_data['coef'] is not None:
+             coef_list = model_data['coef'].flatten().tolist()
+        
+        sym_features_srepr = [sympy.srepr(sf) for sf in model_data.get('sym_features', [])]
+
+        model_info = {
+            'Dimension': D, 'is_best': D == sisso.best_D_,
+            'Score_Train': model_data['score'], 'Score_CV': sisso.cv_results_.get(D, (None, None))[0],
+            'is_plottable': is_plottable, 'fix_intercept': fix_intercept,
+            'features': model_data.get('features', []),
+            'coefficients': coef_list,
+            'sym_features': sym_features_srepr,
+            'Model_Type': 'Parametric' if model_data.get('is_parametric') else 'Linear' if is_plottable else 'Other'
+        }
+        models_summary.append(model_info)
+
+    models_summary_path = workdir / "final_models_summary.json"
+    with open(models_summary_path, 'w') as f:
+        json.dump(models_summary, f, indent=2)
+    print(f"  Saved final SISSO models summary to '{models_summary_path}'")
+
+    # --- C. Save Symbol Map ---
+    clean_map_str = {str(k): str(v) for k, v in sisso.sym_clean_to_original_map_.items()}
+    # ** THIS IS THE CORRECTED LINE **
+    symbol_map_path = workdir / "symbol_map.json" 
+    with open(symbol_map_path, 'w') as f:
+        json.dump(clean_map_str, f, indent=2)
+    print(f"  Saved symbol map to '{symbol_map_path}'")
+
+    # --- 7. Print Final Standard Summary ---
     print("\n" + "="*25 + " FINAL MODEL REPORT " + "="*25)
     print(sisso.summary_report(X, y, sample_weight=None))
-
-    print("\n" + "="*25 + " LATEX FORMULA " + "="*25)
-    try:
-        latex_formula = sisso.best_model_latex(target_name="P")
-        print("Copy and paste the following into your LaTeX document:")
-        print(latex_formula)
-    except Exception as e:
-        print(f"Could not generate LaTeX formula: {e}")
-    
     print("\n" + "="*70)
-    print(f"\nAnalysis complete. All detailed results and plots are saved in '{workdir}'.")
-
-
-def create_demo_files():
-    """Creates a sample dataset and config file for demonstration."""
-    print("--- Creating demo files (demo_config.json, demo_data.csv) ---")
-    
-    # Use the provided SISSO_Sample_Dataset.csv if it exists, otherwise create a dummy
-    sample_data_path = Path("SISSO_Sample_Dataset.csv")
-    demo_data_path = Path("demo_data.csv")
-    if sample_data_path.exists():
-        data_to_use = sample_data_path
-        property_to_use = "Target_U (eV)"
-    else:
-        np.random.seed(42)
-        f1 = np.random.rand(100) * 10
-        f2 = np.random.rand(100) * 5 + 2
-        y = 2.5 * (f1 / f2) + 5 + np.random.randn(100) * 0.5
-        df = pd.DataFrame({'feature1': f1, 'feature2': f2, 'target_property': y})
-        df.to_csv(demo_data_path, index=False)
-        data_to_use = demo_data_path
-        property_to_use = "target_property"
-    
-    # Create a corresponding demo config file
-    demo_config = {
-        "data_file": str(data_to_use),
-        "property_key": property_to_use,
-        "workdir": "sisso_demo_omp_output",
-        "depth": 2,
-        "max_D": 2,
-        "sis_sizes": [50],
-        "search_strategy": "omp", 
-        "task_type": "regression",
-        "selection_method": "cv",
-        "cv": 5,
-        "n_jobs": -1,
-        "random_state": 42
-    }
-    with open('demo_config.json', 'w') as f:
-        json.dump(demo_config, f, indent=2)
-    return 'demo_config.json'
+    print(f"\nAnalysis complete. All results are saved in '{workdir}'.")
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(
-        description="Python-native Sure Independence Screening and Sparsifying Operator (pySISSO)",
-        formatter_class=argparse.RawTextHelpFormatter
-    )
-    parser.add_argument('config_file', nargs='?', default=None, help="Path to the JSON configuration file.\nIf not provided, a demo will be run.")
+    parser = argparse.ArgumentParser(description="Python-native Sure Independence Screening and Sparsifying Operator (pySISSO)")
+    parser.add_argument('config_file', help="Path to the JSON configuration file.")
     args = parser.parse_args()
-
-    if args.config_file:
-        run_analysis(args.config_file)
-    else:
-        print("No config file provided. Running a demonstration.")
-        config_to_run = create_demo_files()
-        run_analysis(config_to_run)
+    run_analysis(args.config_file)
