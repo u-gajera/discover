@@ -97,10 +97,6 @@ Here is a minimal example:
   "cv": 5
 }
 
-Here's your content converted into **Markdown** format:
-
----
-
 # Step 3: Run the Analysis
 
 Execute `run_sisso.py` from your terminal, passing the configuration file as the argument:
