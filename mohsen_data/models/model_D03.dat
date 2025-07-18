@@ -1,0 +1,21 @@
+# DIMENSION: 3
+# SCORE_ON_FULL_DATA (RMSE): 0.265526
+# CV_SCORE (RMSE): 0.251026 +/- 0.0937672
+# IS_BEST: NO
+# IS_PARAMETRIC: NO
+
+# Intercept, Coefs...
+0.01730330 0.85535489 -0.10389793 0.00462582
+
+# DESCRIPTOR FEATURES (human readable):
+# D1: │Eₛᵢₜₑ│
+# D2: E_oct⋅(Eₘₑₜₐₗ - │Eₛᵢₜₑ│)
+────────────────────────
+           E
+# D3: 2     
+Eₛᵢₜₑ ⋅Eₜₑₜ
+───────────
+   E_oct
+
+# S-EXPRESSION(S)
+(+ 0.0173032952564602 (* 0.855354893443388 (abs E_site)) (* 0.00462582373339645 E_tet (/ 1 E_oct) (** E_site 2)) (* -0.103897926339248 E_oct (/ 1 E) (+ E_metal (- (abs E_site)))))

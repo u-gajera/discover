@@ -1,11 +1,12 @@
 Of course. Here is the complete `README.md` file, fully formatted in Markdown.
 
-````markdown
 # pySISSO: A Python Implementation of Sure Independence Screening and Sparsifying Operator
 
 **pySISSO** is a modern, Python-native implementation of the Sure Independence Screening and Sparsifying Operator (SISSO) method, a powerful machine learning framework for discovering predictive, interpretable models and descriptors from large feature spaces. This implementation is designed for ease of use, extensibility, and performance, incorporating modern best practices and algorithmic enhancements.
 
 This tool is ideal for researchers and data scientists in materials science, chemistry, and other scientific domains who need to find physically meaningful relationships in their data.
+
+![Parity Plot Example](https://i.imgur.com/g8iVv4v.png)
 
 ***
 
@@ -102,7 +103,6 @@ Here is a minimal example of `config.json`:
   "selection_method": "cv",
   "cv": 5
 }
-````
 
 ### Step 3: Run the Analysis
 
@@ -198,6 +198,3 @@ The project is organized into several modules, each with a specific responsibili
   * `plot_results.py`: A standalone utility for visualizing the results after a run is complete.
 
 This modular structure makes the code easier to understand, maintain, and extend.
-
-```
-```
