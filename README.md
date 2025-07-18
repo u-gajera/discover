@@ -1,6 +1,4 @@
-Of course. Here is a comprehensive `README.md` file for your Python implementation of SISSO, formatted for direct use on GitHub.
 
-````markdown
 # pySISSO: A Python Implementation of Sure Independence Screening and Sparsifying Operator
 
 **pySISSO** is a modern, Python-native implementation of the Sure Independence Screening and Sparsifying Operator (SISSO) method, a powerful machine learning framework for discovering predictive, interpretable models and descriptors from large feature spaces. This implementation is designed for ease of use, extensibility, and performance, incorporating modern best practices and algorithmic enhancements.
