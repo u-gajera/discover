@@ -5,8 +5,6 @@
 
 This tool is ideal for researchers and data scientists in materials science, chemistry, and other scientific domains who need to find physically meaningful relationships in their data.
 
-![Parity Plot Example](httpshttps://i.imgur.com/g8iVv4v.png)
-
 ## Features
 
 * **Iterative Feature Generation:** Efficiently builds a high-quality feature space by iteratively generating and screening features, avoiding the combinatorial explosion of traditional methods.
@@ -139,7 +137,7 @@ After a run is complete, you can use the `plot_results.py` utility to generate p
 This creates a grid of parity plots, one for the best-found model at each dimension.
 
 ```bash
-python plot_results.py <workdir> <data_file> --property-key "<your_target_name>"
+python plot_results.py <workdir> <data_file> 
 ```
 
   * **`<workdir>`**: The output directory from your `run_sisso.py` run.
@@ -149,7 +147,7 @@ python plot_results.py <workdir> <data_file> --property-key "<your_target_name>"
 **Example:**
 
 ```bash
-python plot_results.py sisso_output SISSO_Sample_Dataset.csv --property-key "Target_U (eV)"
+python plot_results.py sisso_output SISSO_Sample_Dataset.csv "
 ```
 
 This saves `parity_best_allD.png` in the `sisso_output` directory.
@@ -158,7 +156,7 @@ This saves `parity_best_allD.png` in the `sisso_output` directory.
 Generate a parity plot for a specific model dimension (`-D`).
 
 ```bash
-python plot_results.py <workdir> <data_file> --property-key "<your_target_name>" --mode sisso -D 2
+python plot_results.py <workdir> <data_file>  --mode sisso -D 2
 ```
 
 This command will generate a plot for the 2-dimensional model and save it as `parity_sisso_D2.png`.
@@ -167,7 +165,7 @@ This command will generate a plot for the 2-dimensional model and save it as `pa
 Analyze the performance of the best individual features (1D models) found by Sure Independence Screening.
 
 ```bash
-python plot_results.py <workdir> <data_file> --property-key "<your_target_name>" --mode sis --top 6
+python plot_results.py <workdir> <data_file>  --mode sis --top 3
 ```
 
 This command plots the top 6 features and saves the figure as `parity_sis_top6.png`.
