@@ -10,7 +10,7 @@
   "data_file":               "train.csv",
   "property_key":            "property",
   "non_feature_cols": [
-    "materials"
+    "materials", "E", "E_site"
   ],
   "workdir":                 "mohsen_data",
   "save_feature_space":      true,
@@ -23,7 +23,9 @@
   "depth":                   2,
   "op_rules": [
     {"op": "add"}, {"op": "sub"}, {"op": "mul"}, {"op": "div"},
-    {"op": "inv"}, {"op": "abs"}, {"op": "sq"}, {"op": "sqrt"}
+    {"op": "inv"}, {"op": "abs"}, {"op": "sq"}, {"op": "cb"}, 
+    {"op": "sqrt"}, {"op": "cbrt"}, {"op": "log"}, {"op": "exp"},
+    {"op": "abs_diff"}, {"op": "harmonic_mean"}
   ],
   "parametric_ops":          [],
   "interaction_only":        false,
@@ -58,9 +60,9 @@
   "//": "                   3. SEARCH & SELECTION STRATEGY                    ",
   "//": "===================================================================",
   
-  "max_D":                   3,
+  "max_D":                   4,
   "sis_sizes":               [50],
-  "search_strategy":         "omp",
+  "search_strategy":         "greedy",
   "max_feat_cross_correlation": 0.95,
 
   "//": "===================================================================",

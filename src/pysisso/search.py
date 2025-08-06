@@ -19,6 +19,7 @@ Workflow per dimension D:
 Iterates D = 1…max_D, saving JSON summaries after each pass.
 """
 import numpy as np
+import pandas as pd
 import sympy
 import time
 import math
