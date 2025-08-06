@@ -1,10 +1,9 @@
+
 # pySISSO: A Python Implementation of Sure Independence Screening and Sparsifying Operator
 
 **pySISSO** is a modern, Python-native implementation of the Sure Independence Screening and Sparsifying Operator (SISSO) method, a powerful machine learning framework for discovering predictive, interpretable models and descriptors from large feature spaces. This implementation is designed for ease of use, extensibility, and performance, incorporating modern best practices and algorithmic enhancements.
 
 This tool is ideal for researchers and data scientists in materials science, chemistry, and other scientific domains who need to find physically meaningful relationships in their data.
-
-example coming
 
 ## Features
 
@@ -95,9 +94,10 @@ Here is a minimal example:
   "search_strategy": "greedy",
   "selection_method": "cv",
   "cv": 5
-}```
+}
+````
 
-# Step 3: Run the Analysis
+### Step 3: Run the Analysis
 
 Execute `run_sisso.py` from your terminal, passing the configuration file as the argument:
 
@@ -105,9 +105,7 @@ Execute `run_sisso.py` from your terminal, passing the configuration file as the
 python run_sisso.py config.json
 ```
 
-The script will start, display progress, and save all outputs—including models, plots, and summary reports—into the directory specified by `"workdir"`. The final, best model will be printed to the console.
-
----
+The script will start, display progress, and save all outputs—including models, plots, and summary reports—into the directory specified by `workdir`. The final, best model will be printed to the console.
 
 ## Advanced Usage and Analytics
 
@@ -115,90 +113,76 @@ The script will start, display progress, and save all outputs—including models
 
 The `config.json` file offers deep control over the analysis. Here are some key sections to explore for advanced use:
 
-#### Feature-Space Construction (`op_rules`, `depth`):
+  * **Feature-Space Construction (`op_rules`, `depth`):**
 
-* **`depth`**: Controls the recursion depth for creating new features. Higher values create more complex features but increase computation time.
-* **`op_rules`**: A list of mathematical operators to use. You can prune the list to enforce physical constraints or add advanced operators.
+      * `"depth"`: Controls the recursion depth for creating new features. Higher values create more complex features but increase computation time.
+      * `"op_rules"`: A list of mathematical operators to use. You can prune the list to enforce physical constraints or add advanced operators.
 
-#### Search and Selection (`search_strategy`, `selection_method`):
+  * **Search and Selection (`search_strategy`, `selection_method`):**
 
-* **`search_strategy`**: Choose from `"greedy"`, `"sisso++"`, `"omp"`, or `"brute_force"` to balance speed and accuracy.
-* **`selection_method`**: How to pick the best model dimension. Use `"cv"` (cross-validation), `"bootstrap"`, `"aic"`, or `"bic"`.
+      * `"search_strategy"`: Choose from `"greedy"`, `"sisso++"`, `"omp"`, or `"brute_force"` to balance speed and accuracy.
+      * `"selection_method"`: How to pick the best model dimension. Use `"cv"` (cross-validation), `"bootstrap"`, `"aic"`, or `"bic"`.
 
-#### Model and Validation (`loss`, `alpha`, `cv`):
+  * **Model and Validation (`loss`, `alpha`, `cv`):**
 
-* **`loss`**: For regression, choose between `"l2"` (standard Ridge) or `"huber"` (robust to outliers).
-* **`alpha`**: The regularization strength for the linear model.
-* **`cv`**: The number of folds for cross-validation. Use `-1` for Leave-One-Out CV.
+      * `"loss"`: For regression, choose between `"l2"` (standard Ridge) or `"huber"` (robust to outliers).
+      * `"alpha"`: The regularization strength for the linear model.
+      * `"cv"`: The number of folds for cross-validation. Use `-1` for Leave-One-Out CV.
 
----
-
-## Plotting and Interpreting Results with `plot_results.py`
+### Plotting and Interpreting Results with `plot_results.py`
 
 After a run is complete, you can use the `plot_results.py` utility to generate publication-quality parity plots and other analyses.
 
-### 1. Plot the Best Model for All Dimensions
-
+**1. Plot the Best Model for All Dimensions:**
 This creates a grid of parity plots, one for the best-found model at each dimension.
 
 ```bash
-python plot_results.py <workdir> <data_file> --property-key "<your_target_name>"
+python plot_results.py <workdir> <data_file> 
 ```
 
-* `<workdir>`: The output directory from your `run_sisso.py` run.
-* `<data_file>`: The original data file used for the run.
-* `<your_target_name>`: The name of your target property column.
+  * **`<workdir>`**: The output directory from your `run_sisso.py` run.
+  * **`<data_file>`**: The original data file used for the run.
+  * **`<your_target_name>`**: The name of your target property column.
 
 **Example:**
 
 ```bash
-python plot_results.py sisso_output SISSO_Sample_Dataset.csv --property-key "Target_U (eV)"
+python plot_results.py sisso_output SISSO_Sample_Dataset.csv "
 ```
 
 This saves `parity_best_allD.png` in the `sisso_output` directory.
 
----
-
-### 2. Plot a Specific SISSO Model
-
-Generate a parity plot for a specific model dimension (`-D` or `--dimension`):
+**2. Plot a Specific SISSO Model:**
+Generate a parity plot for a specific model dimension (`-D`).
 
 ```bash
-python plot_results.py <workdir> <data_file> --property-key "<your_target_name>" --mode sisso -D 2
+python plot_results.py <workdir> <data_file>  --mode sisso -D 2
 ```
 
 This command will generate a plot for the 2-dimensional model and save it as `parity_sisso_D2.png`.
 
----
-
-### 3. Plot Top SIS Candidates
-
-Analyze the performance of the best individual features (1D models) found by Sure Independence Screening:
+**3. Plot Top SIS Candidates:**
+Analyze the performance of the best individual features (1D models) found by Sure Independence Screening.
 
 ```bash
-python plot_results.py <workdir> <data_file> --property-key "<your_target_name>" --mode sis --top 6
+python plot_results.py <workdir> <data_file>  --mode sis --top 3
 ```
 
 This command plots the top 6 features and saves the figure as `parity_sis_top6.png`.
-
----
 
 ## Code Structure
 
 The project is organized into several modules, each with a specific responsibility:
 
-* `run_sisso.py`: The main command-line interface to drive the analysis.
-* `config.json`: The central configuration file for setting up a run.
-* `pysisso/`: The main package directory.
-
-  * `__init__.py`: Initializes the package and exports the main classes.
-  * `models.py`: Contains the primary user-facing SISSO classes that orchestrate the workflow.
-  * `features.py`: Handles the generation of the feature space from primary features and mathematical operators.
-  * `search.py`: Implements the different search strategies (Greedy, SISSO++, OMP, etc.).
-  * `scoring.py`: Contains functions for model evaluation, cross-validation, and Sure Independence Screening (SIS).
-  * `utils.py`: Provides helper functions for plotting, saving results, and formatting formulas.
-  * `constants.py`: Defines global constants used throughout the package.
-* `plot_results.py`: A standalone utility for visualizing the results after a run is complete.
+  * `run_sisso.py`: The main command-line interface to drive the analysis.
+  * `config.json`: The central configuration file for setting up a run.
+  * `pysisso/`: The main package directory.
+      * `models.py`: Contains the primary user-facing `SISSO` classes, which orchestrate the entire workflow.
+      * `features.py`: Handles the generation of the feature space from primary features and mathematical operators.
+      * `search.py`: Implements the different search strategies (Greedy, SISSO++, OMP, etc.).
+      * `scoring.py`: Contains functions for model evaluation, cross-validation, and SIS.
+      * `utils.py`: Provides helper functions for plotting, saving results, and formatting formulas.
+      * `constants.py`: Defines global constants used throughout the package.
+  * `plot_results.py`: A standalone utility for visualizing the results after a run is complete.
 
 This modular structure makes the code easier to understand, maintain, and extend.
-
