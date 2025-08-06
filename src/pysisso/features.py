@@ -13,7 +13,6 @@ These symbolic expressions are stored as SymPy trees so they can be manipulated
 and evaluated efficiently.
 """
 
-
 import pandas as pd
 import numpy as np
 import sympy
@@ -138,7 +137,11 @@ class UFeature:
 
         vals = values.magnitude if hasattr(values, 'magnitude') else values
         if xp == torch:
-            torch_dtype = {np.float32: torch.float32, np.float64: torch.float64}.get(np.dtype(dtype).type)
+            if isinstance(dtype, torch.dtype):
+                torch_dtype = dtype
+            else:
+                torch_dtype = {np.float32: torch.float32, 
+                               np.float64: torch.float64}.get(np.dtype(dtype).type)
             self.values = torch.tensor(vals, dtype=torch_dtype, device=self.torch_device)
         else:
             self.values = xp.asarray(vals, dtype=dtype)
@@ -242,20 +245,23 @@ class UFeature:
 
 def apply_op(f, op_func, min_val, max_val):
     """Helper to apply a unary operator and check for validity."""
+    epsilon = 1e-7 if f.xp == torch and f.values.dtype == torch.float32 else 1e-9
     try:
        new_feat = op_func()
        if new_feat and new_feat.xp.all(new_feat.xp.isfinite(new_feat.values)):
            abs_vals = new_feat.xp.abs(new_feat.values)
            if new_feat.xp.any(abs_vals < min_val) or new_feat.xp.any(abs_vals > max_val):
                return None
-           if new_feat.xp.all(abs_vals < 1e-9): return None
-           if new_feat.xp.max(new_feat.values) - new_feat.xp.min(new_feat.values) < 1e-9: return None
+           if new_feat.xp.all(abs_vals < epsilon): return None
+           if new_feat.xp.max(new_feat.values) - new_feat.xp.min(new_feat.values) < epsilon: return None
            return new_feat.sym_expr, new_feat
     except Exception: pass
     return None
 
+
 def apply_binary_op(f1, f2, op_name, min_val, max_val):
     """Helper to apply a binary operator and check for validity."""
+    epsilon = 1e-7 if f1.xp == torch and f1.values.dtype == torch.float32 else 1e-9
     try:
         op_method_name = UFeature.get_binary_op_method_name(op_name)
         if not op_method_name: return None
@@ -270,14 +276,15 @@ def apply_binary_op(f1, f2, op_name, min_val, max_val):
             abs_vals = new_feat.xp.abs(new_feat.values)
             if new_feat.xp.any(abs_vals < min_val) or new_feat.xp.any(abs_vals > max_val):
                 return None
-            if new_feat.xp.all(abs_vals < 1e-9): return None
-            if new_feat.xp.max(new_feat.values) - new_feat.xp.min(new_feat.values) < 1e-9: return None
+            if new_feat.xp.all(abs_vals < epsilon): return None
+            if new_feat.xp.max(new_feat.values) - new_feat.xp.min(new_feat.values) < epsilon: return None
             return new_feat.sym_expr, new_feat
     except Exception: pass
     return None
 
 def apply_custom_binary_op(f1, f2, op_def, min_val, max_val):
     """Helper to apply a custom binary operator."""
+    epsilon = 1e-7 if f1.xp == torch and f1.values.dtype == torch.float32 else 1e-9
     try:
         op_name = op_def.get('op_name', '?')
         new_feat = f1._apply_binary_op(
@@ -289,8 +296,8 @@ def apply_custom_binary_op(f1, f2, op_def, min_val, max_val):
         if new_feat and new_feat.xp.all(new_feat.xp.isfinite(new_feat.values)):
             abs_vals = new_feat.xp.abs(new_feat.values)
             if new_feat.xp.any(abs_vals < min_val) or new_feat.xp.any(abs_vals > max_val): return None
-            if new_feat.xp.all(abs_vals < 1e-9): return None
-            if new_feat.xp.max(new_feat.values) - new_feat.xp.min(new_feat.values) < 1e-9: return None
+            if new_feat.xp.all(abs_vals < epsilon): return None
+            if new_feat.xp.max(new_feat.values) - new_feat.xp.min(new_feat.values) < epsilon: return None
             return new_feat.sym_expr, new_feat
     except Exception: pass
     return None
@@ -298,6 +305,7 @@ def apply_custom_binary_op(f1, f2, op_def, min_val, max_val):
 
 def apply_parametric_op(feature, op_def, min_val, max_val):
     """Applies a parametric operator with its initial default parameter values."""
+    epsilon = 1e-7 if feature.xp == torch and feature.values.dtype == torch.float32 else 1e-9
     try:
         p_initial = op_def['p_initial']
         if op_def.get('domain_check') and not op_def['domain_check'](feature): return None
@@ -311,8 +319,8 @@ def apply_parametric_op(feature, op_def, min_val, max_val):
         if not np.all(np.isfinite(new_values)): return None
         abs_vals = np.abs(new_values)
         if np.any(abs_vals < min_val) or np.any(abs_vals > max_val): return None
-        if np.all(abs_vals < 1e-9): return None
-        if np.max(new_values) - np.min(new_values) < 1e-9: return None
+        if np.all(abs_vals < epsilon): return None
+        if np.max(new_values) - np.min(new_values) < epsilon: return None
 
         p_symbols = [sympy.Symbol(p) for p in op_def['p_names']]
         new_sym_expr = op_def['sym_func'](feature.sym_expr, p_symbols).subs(zip(p_symbols, p_initial))
@@ -389,19 +397,32 @@ def _values_to_numpy(v):
 
 
 def _is_numerically_duplicate(new_feat, existing_feats, tol=1e-12):
-    """True if *new_feat* is numerically identical (within tol) to any in *existing_feats*."""
-    nv = _values_to_numpy(new_feat.values)
+    """
+    True if *new_feat* is numerically identical (within tol) to any in *existing_feats*.
+    This version is device-aware to avoid GPU->CPU data transfer bottlenecks.
+    """
+    nv = new_feat.values
+    xp = new_feat.xp # The math package (np, cp, or torch)
+
     for ef in existing_feats:
-        ev = _values_to_numpy(ef.values)
+        ev = ef.values
         if nv.shape != ev.shape:
             continue
-        if np.allclose(nv, ev, rtol=tol, atol=tol, equal_nan=True):
-            return True
+        
+        # Perform the check using the device's math library (xp)
+        if xp == torch:
+            # Use torch.allclose for tensor comparison on the GPU
+            if torch.allclose(nv, ev, rtol=tol, atol=tol, equal_nan=True):
+                return True
+        else: # Works for both numpy and cupy
+            if xp.allclose(nv, ev, rtol=tol, atol=tol, equal_nan=True):
+                return True
+
     return False
 
-# ------------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
 # Core iterative generator (patched sections marked)
-# ------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------
 
 def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis_iter,
                                   sis_score_degeneracy_epsilon,
@@ -412,7 +433,7 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
     """Breadth-first SIS-driven feature generator (feature-space only)."""
     from .scoring import run_SIS  # local import to avoid circular
 
-    # --- Setup --------------------------------------------------------------------------------------------------
+    # --- Setup -----------------------------------------------------------
     ureg = None
     if PINT_AVAILABLE:
         ureg = pint.UnitRegistry()
@@ -427,7 +448,7 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
     clean_to_original_map = dict(zip(primary_symbols, original_symbols))
     X_clean = X.copy(); X_clean.columns = clean_names
 
-    # build rung-0 features --------------------------------------------------------------------------------------
+    # build rung-0 features --------------------------------------------------------
     initial_features = []
     if not primary_units: primary_units = {}
     for i, name in enumerate(X_clean.columns):
@@ -444,7 +465,7 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
     print(f"\nStarting iterative feature generation on {device_name} to depth {depth}...")
     print(f"  Keeping top {n_features_per_sis_iter} features per iteration.")
 
-    # canonical map of currently retained features ---------------------------------------------------------------
+    # canonical map of currently retained features -----------------------------------
     candidate_features_map = {_canonicalize_expr(feat.sym_expr): feat for feat in initial_features}
     last_level_features = initial_features
 
@@ -455,7 +476,7 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
         print(f"\n  Depth {d}: Generating new features...")
         newly_added_this_level = []
 
-        # --- Unary ops -----------------------------------------------------------------------------------------
+        # --- Unary ops ---------------------------------------------------------
         apply_unary_now = (not interaction_only) and (d <= unary_rungs)
         if apply_unary_now:
             for f in last_level_features:
@@ -470,24 +491,29 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
                             res = apply_op(f, op_func, min_abs_feat_val, max_abs_feat_val)
                     elif op_name in CUSTOM_UNARY_OP_DEFS:
                         op_def = CUSTOM_UNARY_OP_DEFS[op_name]
-                        op_func = lambda: f._apply_unary_op(op_def['func'], op_def.get('unit_op', lambda u: u),
-                                                            op_def['sym_func'], op_def['name_func'],
-                                                            op_def.get('unit_check'), op_def.get('domain_check'))
+                        op_func = lambda: f._apply_unary_op(op_def['func'], 
+                                                            op_def.get('unit_op', 
+                                                                       lambda u: u),
+                                                            op_def['sym_func'], 
+                                                            op_def['name_func'],
+                                                            op_def.get('unit_check'), 
+                                                            op_def.get('domain_check'))
                         res = apply_op(f, op_func, min_abs_feat_val, max_abs_feat_val)
                     elif op_name in parametric_ops and op_name in PARAMETRIC_OP_DEFS:
-                        res = apply_parametric_op(f, PARAMETRIC_OP_DEFS[op_name], min_abs_feat_val, max_abs_feat_val)
+                        res = apply_parametric_op(f, PARAMETRIC_OP_DEFS[op_name], 
+                                                  min_abs_feat_val, max_abs_feat_val)
 
                     if res:
                         expr, feat = res
                         simplified_expr = _canonicalize_expr(expr)
                         if not simplified_expr.is_Number:
-                            # PATCH: numeric duplicate guard -----------------------------------------------------
                             if (simplified_expr not in candidate_features_map and
-                                not _is_numerically_duplicate(feat, candidate_features_map.values())):
+                                not _is_numerically_duplicate(feat, 
+                                                    candidate_features_map.values())):
                                 candidate_features_map[simplified_expr] = feat
                                 newly_added_this_level.append(feat)
 
-        # --- Binary ops ----------------------------------------------------------------------------------------
+        # --- Binary ops --------------------------------------------------
         all_candidate_features_list = list(candidate_features_map.values())
         for f1 in last_level_features:
             for f2 in all_candidate_features_list:
@@ -519,7 +545,9 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
                         # assume custom binary ops commutative unless flagged otherwise
                         if f2.name < f1.name:
                             continue
-                        res = apply_custom_binary_op(f1, f2, CUSTOM_BINARY_OP_DEFS[op_name], min_abs_feat_val, max_abs_feat_val)
+                        res = apply_custom_binary_op(f1, f2, CUSTOM_BINARY_OP_DEFS[op_name], 
+                                                     min_abs_feat_val, max_abs_feat_val)
+                        
                     if res:
                         expr, feat = res
                         simplified_expr = _canonicalize_expr(expr)

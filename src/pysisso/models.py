@@ -240,8 +240,16 @@ class SISSOBase(BaseEstimator):
         elif self.device == 'mps':
             if not MPS_AVAILABLE: raise ImportError("device='mps' requires a torch installation on an Apple Silicon machine.")
             self.xp_, self.torch_device_ = torch, torch.device("mps")
+            if self.dtype == 'float64':
+                warnings.warn("MPS device does not support float64. Forcing dtype to 'float32' for this run.")
+                self.dtype = 'float32'
         else: self.xp_ = np
-         
+        if np.dtype(self.dtype).type == np.float32:
+            f32_max = np.finfo(np.float32).max
+            if self.max_abs_feat_val > f32_max:
+                warnings.warn(f"Config 'max_abs_feat_val' ({self.max_abs_feat_val:.2e}) exceeds float32 max ({f32_max:.2e}). "
+                                f"Capping it to {f32_max * 0.9:.2e} for this run to avoid overflows.")
+                self.max_abs_feat_val = f32_max * 0.9  # Use a safety margin
         self.model_params_['dtype'] = self.dtype
         if self.loss == 'huber' and self.device in ['cuda', 'mps']:
             warnings.warn("HuberRegressor is not GPU-accelerated. Search will run on CPU.")
