@@ -200,8 +200,7 @@ def run_analysis(config_path):
 
     # --- C. Save Symbol Map ---
     clean_map_str = {str(k): str(v) for k, v in sisso.sym_clean_to_original_map_.items()}
-    # ** THIS IS THE CORRECTED LINE **
-    symbol_map_path = workdir / "symbol_map.json" 
+    symbol_map_path = workdir / "symbol_map.json"
     with open(symbol_map_path, 'w') as f:
         json.dump(clean_map_str, f, indent=2)
     print(f"  Saved symbol map to '{symbol_map_path}'")
