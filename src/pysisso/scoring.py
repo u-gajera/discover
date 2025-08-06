@@ -1,4 +1,3 @@
-
 """
 This module contains all functions related to model evaluation, screening, and
 cross-validation. It includes:
@@ -31,53 +30,63 @@ from .constants import (
     CLASSIFICATION_LOGREG, ALL_CLASSIFICATION_TASKS
 )
 from .features import CUPY_AVAILABLE, TORCH_AVAILABLE
-
-# Optional GPU imports
 try:
     import cupy as cp
 except ImportError:
-    cp = None
+    class cp_dummy:
+        ndarray = type(None)
+        def asnumpy(self, x): return np.asarray(x)
+    cp = cp_dummy()
 
 try:
     import torch
 except ImportError:
-    torch = None
+    class torch_dummy:
+        Tensor = type(None)
+    torch = torch_dummy()
 
 #  Screening and Scoring
 
-def run_SIS(phi_df, y, task_type, xp=np, multitask_sis_method='average'):
+def run_SIS(phi, y, task_type, xp=np, multitask_sis_method='average', phi_tensor=None, phi_names=None):
     """
     Performs Sure Independence Screening (SIS) to rank features.
     For multi-task problems, can use simple 'average' correlation or 'cca'.
+    For GPU paths, it expects a pre-loaded `phi_tensor` and a list of `phi_names`.
+    For CPU paths, it expects a pandas `phi` DataFrame.
 
     as values, sorted in descending order of importance.
     """
-    print(f"Running SIS to screen {phi_df.shape[1]} features...")
-    if phi_df.empty:
-        return pd.Series([], dtype=float) 
+    phi_df = phi 
+    is_gpu_run = task_type == REGRESSION and xp != np and (xp == cp or xp == torch) and phi_tensor is not None
 
-    # GPU-accelerated path for regression
-    if task_type == REGRESSION and xp != np and (xp == cp or xp == torch):
-        print("  Using GPU-accelerated SIS for regression.")
+    if is_gpu_run:
+        print(f"Running SIS to screen {phi_tensor.shape[1]} features on GPU...")
         try:
-            n_samples = phi_df.shape[0]
-            phi_gpu = xp.asarray(phi_df.values, dtype=xp.float64)
-            y_gpu = xp.asarray(y, dtype=xp.float64)
+            phi_gpu = phi_tensor
+            
+            y_np = y.to_numpy(dtype=phi_gpu.dtype.name) if isinstance(y, pd.Series) else np.asarray(y, dtype=phi_gpu.dtype.name)
+            if xp == torch:
+                y_gpu = torch.from_numpy(y_np).to(phi_gpu.device)
+            else: # cupy
+                y_gpu = cp.asarray(y_np)
 
+            if y_gpu.ndim > 1: y_gpu = y_gpu.squeeze()
+
+            n_samples = phi_gpu.shape[0]
             phi_c = phi_gpu - xp.mean(phi_gpu, axis=0)
             y_c = y_gpu - xp.mean(y_gpu)
-
+            
             std_args = {'unbiased': True} if xp == torch else {'ddof': 1}
             phi_std = xp.std(phi_c, dim=0 if xp == torch else 0, **std_args)
             y_std = xp.std(y_c, **std_args)
 
             cov_vec = (phi_c.T @ y_c) / (n_samples - 1)
-
             correlations_gpu = xp.zeros_like(phi_std)
-            valid_std_mask = phi_std > 1e-9
-            if y_std > 1e-9 and xp.any(valid_std_mask):
-                 correlations_gpu[valid_std_mask] = cov_vec[valid_std_mask] / (phi_std[valid_std_mask] * y_std)
+            valid_std_mask = (phi_std > 1e-9) & (y_std > 1e-9)
 
+            if xp.any(valid_std_mask):
+                 correlations_gpu[valid_std_mask] = cov_vec[valid_std_mask] / (phi_std[valid_std_mask] * y_std)
+            
             if CUPY_AVAILABLE and xp == cp:
                 correlations_cpu = cp.asnumpy(xp.abs(correlations_gpu))
             elif TORCH_AVAILABLE and xp == torch:
@@ -85,13 +94,26 @@ def run_SIS(phi_df, y, task_type, xp=np, multitask_sis_method='average'):
             else:
                 correlations_cpu = np.abs(correlations_gpu)
 
-            correlations = pd.Series(correlations_cpu, index=phi_df.columns)
-            print(f"  GPU SIS screening complete. Top feature: '{correlations.idxmax()}'")
+            correlations = pd.Series(correlations_cpu, index=phi_names)
+            if not correlations.empty:
+                print(f"  GPU SIS screening complete. Top feature: '{correlations.idxmax()}'")
+            else:
+                print("  GPU SIS screening complete. No correlated features found.")
             return correlations.dropna().sort_values(ascending=False)
         except Exception as e:
             warnings.warn(f"GPU-based SIS failed: {e}. Falling back to CPU-based SIS.")
+            cpu_values = phi_tensor.cpu().numpy() if TORCH_AVAILABLE and isinstance(phi_tensor, torch.Tensor) else cp.asnumpy(phi_tensor)
+            phi_df = pd.DataFrame(cpu_values, columns=phi_names, index=y.index)
 
-    # CPU path (original implementation and fallback)
+    # CPU path (also serves as the fallback path for a failed GPU run)
+    if phi_df is None:
+        warnings.warn("SIS called in CPU mode but `phi` DataFrame is None. Returning empty Series.")
+        return pd.Series([], dtype=float)
+
+    print(f"Running SIS to screen {phi_df.shape[1]} features on CPU...")
+    if phi_df.empty:
+        return pd.Series([], dtype=float) 
+
     if task_type == REGRESSION:
         y_s = pd.Series(y, index=phi_df.index)
         correlations = phi_df.corrwith(y_s).abs().dropna().sort_values(ascending=False)
@@ -114,15 +136,11 @@ def run_SIS(phi_df, y, task_type, xp=np, multitask_sis_method='average'):
             cca_corrs = {}
             for feature_name in phi_df.columns:
                 try:
-                    # CCA requires 2D input
                     X_feat = phi_df[[feature_name]].values 
-                    # Fit CCA and get the correlation of the first canonical variables
                     X_c, y_c = cca.fit_transform(X_feat, y_df.values)
-                    # The correlation is between the first columns of the transformed sets
                     corr = np.corrcoef(X_c.T, y_c.T)[0, 1]
                     cca_corrs[feature_name] = np.abs(corr)
                 except np.linalg.LinAlgError:
-                    # This can happen if a feature is constant
                     cca_corrs[feature_name] = 0.0
             correlations = pd.Series(cca_corrs).fillna(0).sort_values(ascending=False)
         else: # Default 'average' method
@@ -135,7 +153,6 @@ def run_SIS(phi_df, y, task_type, xp=np, multitask_sis_method='average'):
     if not correlations.empty:
         print(f"  CPU SIS screening complete. Top feature: '{correlations.index[0]}'")
     
-    # Return the full Series
     return correlations
 
 
