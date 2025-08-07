@@ -71,9 +71,10 @@ def _safe_min_max(arr, xp=np):
     return amin, amax
 
 #  Operator Definitions
+# <<< MODIFIED >>>: Parametric funcs now accept 'xp' to be backend-agnostic.
 PARAMETRIC_OP_DEFS = {
     'exp-': {
-        'func': lambda f, p: np.exp(-p[0] * f),
+        'func': lambda f, p, xp: xp.exp(-p[0] * f),
         'sym_func': lambda s, p_sym: sympy.exp(-p_sym[0] * s),
         'p_names': ['p'],
         'p_initial': [1.0],
@@ -81,7 +82,7 @@ PARAMETRIC_OP_DEFS = {
         'unit_check': lambda u: u.dimensionless,
     },
     'pow': {
-        'func': lambda f, p: np.power(f, p[0]),
+        'func': lambda f, p, xp: xp.power(f, p[0]),
         'sym_func': lambda s, p_sym: s**p_sym[0],
         'p_names': ['p'],
         'p_initial': [1.0],
@@ -116,7 +117,7 @@ CUSTOM_BINARY_OP_DEFS = {
         'op_name': "<H>"
     },
     'abs_diff': {
-        'func': lambda f1, f2: abs(f1 - f2), 
+        'func': lambda f1, f2: abs(f1 - f2),
         'sym_func': lambda s1, s2: sympy.Abs(s1 - s2),
         'unit_op': lambda u1, u2: u1,
         'unit_check': lambda u1, u2: u1.dimensionality == u2.dimensionality,
@@ -158,7 +159,7 @@ class UFeature:
     def _apply_binary_op(self, other, op_func, sym_op_func, op_name, unit_op=None, unit_check=None, domain_check=None):
          if self.ureg and unit_check and not unit_check(self.unit, other.unit): return None
          if domain_check and not domain_check(self, other): return None
-         
+
          if not self.ureg:
               try:
                   new_values = op_func(self.values, other.values)
@@ -224,7 +225,7 @@ class UFeature:
            'inv', 'sign', 'sq', 'cb', 'pow6', 'pow-2', 'pow-3',
            'pow0.5', 'pow-0.5'
        ]
-    
+
     def get_unary_op_func(self, op_name):
         """Returns the function for a given unary operator name."""
         op_map = {
@@ -256,7 +257,8 @@ def apply_op(f, op_func, min_val, max_val):
            if new_feat.xp.any(abs_vals < min_val) or new_feat.xp.any(abs_vals > max_val):
                return None
            if new_feat.xp.all(abs_vals < epsilon): return None
-           if new_feat.xp.max(new_feat.values) - new_feat.xp.min(new_feat.values) < epsilon: return None
+           amin, amax = _safe_min_max(new_feat.values, xp=new_feat.xp)
+           if amax - amin < epsilon: return None
            return new_feat.sym_expr, new_feat
     except Exception: pass
     return None
@@ -268,7 +270,7 @@ def apply_binary_op(f1, f2, op_name, min_val, max_val):
     try:
         op_method_name = UFeature.get_binary_op_method_name(op_name)
         if not op_method_name: return None
-        
+
         if op_method_name in ['__sub__', '__truediv__'] and f1.sym_expr == f2.sym_expr:
             return None
 
@@ -279,7 +281,8 @@ def apply_binary_op(f1, f2, op_name, min_val, max_val):
             if new_feat.xp.any(abs_vals < min_val) or new_feat.xp.any(abs_vals > max_val):
                 return None
             if new_feat.xp.all(abs_vals < epsilon): return None
-            if new_feat.xp.max(new_feat.values) - new_feat.xp.min(new_feat.values) < epsilon: return None
+            amin, amax = _safe_min_max(new_feat.values, xp=new_feat.xp)
+            if amax - amin < epsilon: return None
             return new_feat.sym_expr, new_feat
     except Exception: pass
     return None
@@ -299,30 +302,34 @@ def apply_custom_binary_op(f1, f2, op_def, min_val, max_val):
             abs_vals = new_feat.xp.abs(new_feat.values)
             if new_feat.xp.any(abs_vals < min_val) or new_feat.xp.any(abs_vals > max_val): return None
             if new_feat.xp.all(abs_vals < epsilon): return None
-            if new_feat.xp.max(new_feat.values) - new_feat.xp.min(new_feat.values) < epsilon: return None
+            amin, amax = _safe_min_max(new_feat.values, xp=new_feat.xp)
+            if amax - amin < epsilon: return None
             return new_feat.sym_expr, new_feat
     except Exception: pass
     return None
 
-
+# <<< MODIFIED >>>: This function now runs entirely on the device (CPU or GPU)
+# It no longer copies data to the CPU if it's already on the GPU.
 def apply_parametric_op(feature, op_def, min_val, max_val):
     """Applies a parametric operator with its initial default parameter values."""
     epsilon = 1e-7 if feature.xp == torch and feature.values.dtype == torch.float32 else 1e-9
+    xp = feature.xp
     try:
         p_initial = op_def['p_initial']
         if op_def.get('domain_check') and not op_def['domain_check'](feature): return None
         if feature.ureg and op_def.get('unit_check') and not op_def['unit_check'](feature.unit): return None
-        
-        cpu_values = feature.values
-        if feature.xp != np:
-            cpu_values = cp.asnumpy(feature.values) if CUPY_AVAILABLE and isinstance(feature.values, cp.ndarray) else feature.values.cpu().numpy()
 
-        new_values = op_def['func'](cpu_values, p_initial)
-        if not np.all(np.isfinite(new_values)): return None
-        abs_vals = np.abs(new_values)
-        if np.any(abs_vals < min_val) or np.any(abs_vals > max_val): return None
-        if np.all(abs_vals < epsilon): return None
-        if np.max(new_values) - np.min(new_values) < epsilon: return None
+        # MODIFICATION: Operate directly on the device tensor (GPU or CPU)
+        new_values = op_def['func'](feature.values, p_initial, xp)
+
+        if not xp.all(xp.isfinite(new_values)): return None
+
+        # MODIFICATION: Use 'xp' for all numerical checks
+        abs_vals = xp.abs(new_values)
+        if xp.any(abs_vals < min_val) or xp.any(abs_vals > max_val): return None
+        if xp.all(abs_vals < epsilon): return None
+        amin, amax = _safe_min_max(new_values, xp=xp)
+        if amax - amin < epsilon: return None
 
         p_symbols = [sympy.Symbol(p) for p in op_def['p_names']]
         new_sym_expr = op_def['sym_func'](feature.sym_expr, p_symbols).subs(zip(p_symbols, p_initial))
@@ -331,7 +338,8 @@ def apply_parametric_op(feature, op_def, min_val, max_val):
         elif op_def['p_names'] == ['p']: new_unit = feature.unit ** p_initial[0]
         op_name = list(PARAMETRIC_OP_DEFS.keys())[list(PARAMETRIC_OP_DEFS.values()).index(op_def)]
         new_name = f"{op_name}(p={p_initial})({feature.name})"
-        
+
+        # MODIFICATION: 'new_values' is already a device tensor, no re-conversion needed
         new_feat = UFeature(new_name, new_values, new_unit, feature.ureg, new_sym_expr, feature.base_features, feature.xp, dtype=feature.values.dtype, torch_device=feature.torch_device)
         return new_feat.sym_expr, new_feat
     except Exception:
@@ -386,7 +394,7 @@ def _is_numerically_duplicate(new_feat, existing_feats, tol=1e-12):
         ev = ef.values
         if nv.shape != ev.shape:
             continue
-        
+
         if xp == torch:
             if torch.allclose(nv, ev, rtol=tol, atol=tol, equal_nan=True):
                 return True
@@ -464,15 +472,15 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
                             res = apply_op(f, op_func, min_abs_feat_val, max_abs_feat_val)
                     elif op_name in CUSTOM_UNARY_OP_DEFS:
                         op_def = CUSTOM_UNARY_OP_DEFS[op_name]
-                        op_func = lambda: f._apply_unary_op(op_def['func'], 
+                        op_func = lambda: f._apply_unary_op(op_def['func'],
                                                             op_def.get('unit_op', lambda u: u),
-                                                            op_def['sym_func'], 
+                                                            op_def['sym_func'],
                                                             op_def['name_func'],
-                                                            op_def.get('unit_check'), 
+                                                            op_def.get('unit_check'),
                                                             op_def.get('domain_check'))
                         res = apply_op(f, op_func, min_abs_feat_val, max_abs_feat_val)
                     elif op_name in parametric_ops and op_name in PARAMETRIC_OP_DEFS:
-                        res = apply_parametric_op(f, PARAMETRIC_OP_DEFS[op_name], 
+                        res = apply_parametric_op(f, PARAMETRIC_OP_DEFS[op_name],
                                                   min_abs_feat_val, max_abs_feat_val)
 
                     if res:
@@ -489,16 +497,16 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
             for f2 in all_candidate_features_list:
                 for rule in op_rules:
                     op_name = rule['op']
-                    
+
                     if f1 is f2 and op_name in ('add', 'sub'):
                         continue
-                        
+
                     if op_name in ('add', 'sub'):
                         union_size = len(f1.base_features | f2.base_features)
                         max_size   = max(len(f1.base_features), len(f2.base_features))
                         if union_size == max_size:
                             continue
-                            
+
                     if 'exclude_features' in rule:
                         excluded = set(rule['exclude_features'])
                         if not f1.base_features.isdisjoint(excluded) or not f2.base_features.isdisjoint(excluded):
@@ -511,9 +519,9 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
                     elif op_name in CUSTOM_BINARY_OP_DEFS:
                         if f2.name < f1.name:
                             continue
-                        res = apply_custom_binary_op(f1, f2, CUSTOM_BINARY_OP_DEFS[op_name], 
+                        res = apply_custom_binary_op(f1, f2, CUSTOM_BINARY_OP_DEFS[op_name],
                                                      min_abs_feat_val, max_abs_feat_val)
-                        
+
                     if res:
                         expr, feat = res
                         simplified_expr = _canonicalize_expr(expr)
@@ -540,7 +548,7 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
             # Stack all feature tensors into one big tensor on the GPU
             feature_tensors = [feat.values.reshape(-1, 1) for feat in candidate_features_map.values()]
             phi_tensor = xp.hstack(feature_tensors) if xp == cp else torch.cat(feature_tensors, dim=1)
-            
+
             sorted_scores_series = run_SIS(
                 phi=None, y=y, task_type=task_type, xp=xp, multitask_sis_method=multitask_sis_method,
                 phi_tensor=phi_tensor, phi_names=candidate_names
@@ -550,37 +558,9 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
             temp_phi_df = pd.DataFrame(temp_values_dict, index=X.index)
             sorted_scores_series = run_SIS(temp_phi_df, y, task_type, xp=xp, multitask_sis_method=multitask_sis_method)
 
-        # --- Diagnostics: top-5 1D fits (This part needs CPU data, but is efficient) ---
-        if task_type == 'regression' and not sorted_scores_series.empty:
-            print("    ------------------ Top 5 SIS Candidates (1D Model Performance) ------------------")
-            print(f"    {'Rank':<5} | {'Correlation':<12} | {'R2 Score':<12} | {'RMSE':<12} | {'Feature Formula':<50}")
-            print(f"    {'-'*5} | {'-'*12} | {'-'*12} | {'-'*12} | {'-'*50}")
-            n_to_report = min(5, len(sorted_scores_series))
-            
-            top_5_names = sorted_scores_series.index[:n_to_report].tolist()
-            if is_gpu_run:
-                top_5_indices = [candidate_names.index(n) for n in top_5_names]
-                top_5_values_cpu = phi_tensor[:, top_5_indices].cpu().numpy() if xp==torch else cp.asnumpy(phi_tensor[:, top_5_indices])
-                diag_phi_df = pd.DataFrame(top_5_values_cpu, columns=top_5_names, index=X.index)
-            else:
-                diag_phi_df = temp_phi_df[top_5_names]
-
-            for i in range(n_to_report):
-                feat_name = top_5_names[i]
-                corr_score = sorted_scores_series.iloc[i]
-                X_feat = diag_phi_df[[feat_name]]
-                
-                sym_expr = candidate_sym_map.get(feat_name)
-                pretty_formula = sympy.sstr(sym_expr.subs(clean_to_original_map), full_prec=False) if sym_expr else feat_name
-                
-                try:
-                    model = LinearRegression(); model.fit(X_feat, y); y_pred = model.predict(X_feat)
-                    r2 = r2_score(y, y_pred); rmse = np.sqrt(mean_squared_error(y, y_pred))
-                    print(f"    {i+1:<5} | {corr_score:<12.4f} | {r2:<12.4f} | {rmse:<12.4f} | {pretty_formula:<50}")
-                except Exception:
-                    print(f"    {i+1:<5} | {corr_score:<12.4f} | {'N/A':<12} | {'N/A':<12} | {pretty_formula:<50}")
-            print("    -----------------------------------------------------------------------------------")
-
+        # <<< REMOVED >>>: The performance-killing diagnostics block that was here has been removed.
+        # This was a major source of GPU->CPU data transfer inside the main loop.
+        # The run_sisso.py script already performs a better analysis at the very end.
 
         if not isinstance(sorted_scores_series, pd.Series) or sorted_scores_series.empty:
             print("  SIS screening returned no features. Stopping."); break
@@ -600,46 +580,74 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
         if len(top_k_names) > 1:
             print(f"    Filtering {len(top_k_names)} top-scoring features to remove redundancies.")
             if is_gpu_run:
+                # <<< MODIFIED >>>: This block now performs redundancy filtering entirely on the GPU
+                # to avoid a costly GPU->CPU transfer of the correlation matrix.
                 top_k_indices = [candidate_names.index(n) for n in top_k_names]
                 top_k_tensor = phi_tensor[:, top_k_indices]
-                
+
                 top_k_tensor_c = top_k_tensor - top_k_tensor.mean(axis=0)
                 cov_matrix = top_k_tensor_c.T @ top_k_tensor_c / (top_k_tensor_c.shape[0] - 1)
-                
+
                 std_args = {'unbiased': True} if xp == torch else {'ddof': 1}
                 std_devs = xp.std(top_k_tensor, axis=0, **std_args)
-                
+
                 if std_devs.ndim > 1: std_devs = std_devs.squeeze()
 
+                # Calculate correlation matrix on GPU
                 corr_matrix_gpu = cov_matrix / xp.outer(std_devs, std_devs)
+                corr_matrix_gpu[xp.isnan(corr_matrix_gpu)] = 0 # Handle potential div by zero
 
                 if xp == torch:
                     corr_matrix_gpu.fill_diagonal_(1.0)
                 else: # for numpy and cupy
                     corr_matrix_gpu[xp.diag_indices_from(corr_matrix_gpu)] = 1.0
+
+                corr_matrix = xp.abs(corr_matrix_gpu)
                 
-                corr_matrix_cpu = cp.asnumpy(corr_matrix_gpu) if xp==cp else corr_matrix_gpu.cpu().numpy()
-                corr_matrix = pd.DataFrame(np.abs(corr_matrix_cpu), index=top_k_names, columns=top_k_names)
+                # Greedy filtering on GPU
+                to_remove_mask = xp.zeros(len(top_k_names), dtype=bool)
+                for i in range(len(top_k_names)):
+                    if to_remove_mask[i]:
+                        continue
+                    # Mark features to the right of 'i' that are highly correlated for removal
+                    duplicates_in_slice = corr_matrix[i, i+1:] > 0.999
+                    to_remove_mask[i+1:][duplicates_in_slice] = True
+                
+                # Get final indices to keep and convert back to CPU only for name lookup
+                keep_indices = xp.where(~to_remove_mask)[0]
+                if xp == torch:
+                    keep_indices_cpu = keep_indices.cpu().numpy()
+                else: # cupy
+                    keep_indices_cpu = cp.asnumpy(keep_indices)
+
+                original_count = len(top_k_names)
+                final_top_k_names = [top_k_names[i] for i in keep_indices_cpu]
+
+                if len(final_top_k_names) < original_count:
+                    print(f"    Removed {original_count - len(final_top_k_names)} redundant features. Kept {len(final_top_k_names)}.")
+                top_k_names = final_top_k_names
+
             else: # Original CPU path
+                top_k_indices = [candidate_names.index(n) for n in top_k_names]
                 corr_matrix = temp_phi_df[top_k_names].corr().abs()
 
-            upper_tri = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
-            keep, seen = [], set()
-            for col in top_k_names:
-                if col in seen: continue
-                keep.append(col); seen.add(col)
-                dupes = upper_tri.index[upper_tri.loc[:, col] > 0.999].tolist()
-                seen.update(dupes)
-            if len(keep) < len(top_k_names):
-                print(f"    Removed {len(top_k_names) - len(keep)} redundant features. Kept {len(keep)}.")
-            top_k_names = keep
+                upper_tri = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
+                keep, seen = [], set()
+                for col in top_k_names:
+                    if col in seen: continue
+                    keep.append(col); seen.add(col)
+                    dupes = upper_tri.index[upper_tri.loc[:, col] > 0.999].tolist()
+                    seen.update(dupes)
+                if len(keep) < len(top_k_names):
+                    print(f"    Removed {len(top_k_names) - len(keep)} redundant features. Kept {len(keep)}.")
+                top_k_names = keep
 
         # prune candidate map to survivors ---------------------------------------------------------------------
         pruned_map = {}
         for expr, feat in candidate_features_map.items():
             if str(_canonicalize_expr(expr)) in top_k_names:
                 pruned_map[_canonicalize_expr(expr)] = feat
-        
+
         surviving_new_features = []
         pruned_expressions = {str(e) for e in pruned_map.keys()}
         for feat in newly_added_this_level:
@@ -662,7 +670,7 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
         if CUPY_AVAILABLE and isinstance(arr, cp.ndarray): return cp.asnumpy(arr)
         if TORCH_AVAILABLE and isinstance(arr, torch.Tensor): return arr.cpu().numpy()
         return arr
-    
+
     values_dict = {str(_canonicalize_expr(feat.sym_expr)): _to_cpu(feat.values) for feat in final_features_list}
     feature_df = pd.DataFrame(values_dict, index=X.index)
     sym_map = {str(_canonicalize_expr(feat.sym_expr)): _canonicalize_expr(feat.sym_expr) for feat in final_features_list}
