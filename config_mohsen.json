@@ -10,7 +10,7 @@
   "data_file":               "train.csv",
   "property_key":            "property",
   "non_feature_cols": [
-    "materials", "E", "E_site"
+    "materials"
   ],
   "workdir":                 "mohsen_data",
   "save_feature_space":      true,
@@ -60,8 +60,8 @@
   "//": "                   3. SEARCH & SELECTION STRATEGY                    ",
   "//": "===================================================================",
   
-  "max_D":                   4,
-  "sis_sizes":               [100],
+  "max_D":                   2,
+  "sis_sizes":               [200],
   "search_strategy":         "greedy",
   "max_feat_cross_correlation": 0.95,
 

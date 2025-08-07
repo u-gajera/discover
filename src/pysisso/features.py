@@ -21,7 +21,7 @@ import warnings
 
 from joblib import Memory
 from sklearn.linear_model import LinearRegression
-from sklearn.metrics import r2_score, mean_squared_error
+from sklearn.metrics import mean_squared_error, r2_score
 
 # Optional CuPy and Torch acceleration -----------------------------------------------------------
 try:
@@ -248,7 +248,10 @@ class UFeature:
 
 def apply_op(f, op_func, min_val, max_val):
     """Helper to apply a unary operator and check for validity."""
-    epsilon = 1e-7 if f.xp == torch and f.values.dtype == torch.float32 else 1e-9
+    if f.values.dtype in [np.float32, (torch.float32 if TORCH_AVAILABLE else None)]:
+        epsilon = 1e-7
+    else:
+        epsilon = 1e-9
     try:
        new_feat = op_func()
        if new_feat and new_feat.xp.all(new_feat.xp.isfinite(new_feat.values)):
@@ -553,12 +556,59 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
             temp_phi_df = pd.DataFrame(temp_values_dict, index=X.index)
             sorted_scores_series = run_SIS(temp_phi_df, y, task_type, xp=xp, multitask_sis_method=multitask_sis_method)
 
-        # <<< REMOVED >>>: The performance-killing diagnostics block that was here has been removed.
-        # This was a major source of GPU->CPU data transfer inside the main loop.
-        # The run_sisso.py script already performs a better analysis at the very end.
-
         if not isinstance(sorted_scores_series, pd.Series) or sorted_scores_series.empty:
             print("  SIS screening returned no features. Stopping."); break
+        
+        # --- MODIFIED: Print top 5 features with formulas, RMSE, and R2 ---
+        print(f"  SIS screening complete. Top features at this depth:")
+        top_features_data = []
+        y_np = y.values if isinstance(y, pd.Series) else y
+        
+        for i in range(min(5, len(sorted_scores_series))):
+            feat_name = sorted_scores_series.index[i]
+            sis_score = sorted_scores_series.iloc[i]
+            sym_expr = candidate_sym_map.get(feat_name)
+            formula = feat_name
+            if sym_expr:
+                subbed_expr = sym_expr.subs(clean_to_original_map)
+                formula = str(subbed_expr)
+
+            # Calculate RMSE and R2 for the single feature
+            rmse = np.nan
+            r2 = np.nan
+            try:
+                if is_gpu_run:
+                    feat_idx = candidate_names.index(feat_name)
+                    # Get feature values, move to CPU for sklearn
+                    if xp == cp:
+                        feature_values_np = cp.asnumpy(phi_tensor[:, feat_idx])
+                    else: # torch
+                        feature_values_np = phi_tensor[:, feat_idx].cpu().numpy()
+                else:
+                    feature_values_np = temp_phi_df[feat_name].values
+                
+                X_feat = feature_values_np.reshape(-1, 1)
+                model = LinearRegression().fit(X_feat, y_np)
+                y_pred = model.predict(X_feat)
+                rmse = np.sqrt(mean_squared_error(y_np, y_pred))
+                r2 = r2_score(y_np, y_pred)
+            except Exception:
+                pass # Leave RMSE and R2 as NaN if it fails
+
+            top_features_data.append((i + 1, sis_score, rmse, r2, formula))
+
+        if top_features_data:
+            max_formula_len = max(len(f) for _, _, _, _, f in top_features_data)
+            # Header
+            rank_w, sis_w, rmse_w, r2_w = 5, 11, 11, 11
+            header = f"    {'Rank':<{rank_w}} | {'SIS Score':<{sis_w}} | {'RMSE':<{rmse_w}} | {'R2 Score':<{r2_w}} | Formula"
+            separator = f"    {'-'*rank_w}-+-{'-'*sis_w}-+-{'-'*rmse_w}-+-{'-'*r2_w}-+-{'-'*max(7, max_formula_len)}"
+            print(header)
+            print(separator)
+            # Rows
+            for rank, sis_score, rmse, r2, formula in top_features_data:
+                print(f"    {rank:<{rank_w}} | {sis_score:<{sis_w}.4f} | {rmse:<{rmse_w}.4f} | {r2:<{r2_w}.4f} | {formula}")
+
 
         # keep top-k + degeneracy ------------------------------------------------------------------------------
         if len(sorted_scores_series) <= n_features_per_sis_iter:

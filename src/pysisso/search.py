@@ -1,3 +1,4 @@
+
 """
 This module implements the different search strategies for finding the best
 feature combinations (descriptors). It includes:
@@ -73,6 +74,16 @@ except ImportError:
     torch = torch_dummy()
 except:
     pass # Keep going if torch import fails for other reasons
+
+
+def _format_feature_str(sisso_instance, feature_name):
+    """Helper to get a human-readable formula string for a feature name."""
+    sym_expr = sisso_instance.feature_space_sym_map_.get(feature_name)
+    if sym_expr and hasattr(sisso_instance, 'sym_clean_to_original_map_') and sisso_instance.sym_clean_to_original_map_:
+        # Substitute the clean symbols (f0, f1) with original names (E_tet, etc.)
+        subbed_expr = sym_expr.subs(sisso_instance.sym_clean_to_original_map_)
+        return str(subbed_expr)
+    return feature_name
 
 
 class ParametricModel:
@@ -232,7 +243,8 @@ def _find_best_models_omp(sisso_instance, phi_sis_df, y, D_max, task_type,
         
         selected_features.append(best_new_feature)
         candidate_features_df.drop(columns=[best_new_feature], inplace=True)
-        print(f"  Selected feature for D={D_iter}: '{best_new_feature}'")
+        formula_str = _format_feature_str(sisso_instance, best_new_feature)
+        print(f"  Selected feature for D={D_iter}: '{formula_str}'")
 
         # Solve the least squares problem on the current set of selected features
         X_current_dim_df = phi_pruned[selected_features]
@@ -348,7 +360,10 @@ def _find_best_models_miqp(sisso_instance, phi_sis_df, y, D_max, task_type,
 
             if model_data is None: continue
 
+            formulas = [_format_feature_str(sisso_instance, f) for f in final_feature_names]
             print(f"    Optimal model for D={len(final_feature_names)} found with score: {score:.6g}")
+            print(f"      Features: {', '.join(formulas)}")
+            
             sym_features = [sisso_instance.feature_space_sym_map_.get(f, sympy.sympify(f)) for f in final_feature_names]
             models_by_dim[len(final_feature_names)] = {
                 'features': final_feature_names, 'score': score, 'model': model_data.get('model'),
@@ -410,7 +425,8 @@ def _find_best_models_ch_greedy(sisso_instance, phi_sis_df, y, D_max, task_type,
 
         selected_features.append(best_new_feature)
         sisso_instance.timing_summary_[f'Geometric Search D={D_iter}'] = time.time() - t_start_d
-        print(f"    Best feature for D={D_iter}: '{best_new_feature}'")
+        formula_str = _format_feature_str(sisso_instance, best_new_feature)
+        print(f"    Best feature for D={D_iter}: '{formula_str}'")
         print(f"    Best model score for D={D_iter} (overlap): {best_score:.6g}")
 
         sym_features = [sisso_instance.feature_space_sym_map_.get(f, sympy.sympify(f)) for f in selected_features]
@@ -506,9 +522,40 @@ def _find_best_models_greedy(sisso_instance, phi_sis_df, y, X_df, D_max, task_ty
         if sorted_candidates_series.empty:
             print(f"  SIS found no new correlated features. Stopping at D={D_iter-1}."); break
 
+        print(f"  SIS screening on residual complete. Top candidates:")
+        top_features_data = []
+        for i in range(min(5, len(sorted_candidates_series))):
+            feat_name = sorted_candidates_series.index[i]
+            sis_score = sorted_candidates_series.iloc[i]
+            formula = _format_feature_str(sisso_instance, feat_name)
+            
+            rmse_on_residual = np.nan
+            try:
+                X_feat = features_to_screen_df[[feat_name]].values
+                model = LinearRegression().fit(X_feat, current_target)
+                y_pred_residual = model.predict(X_feat)
+                rmse_on_residual = np.sqrt(mean_squared_error(current_target, y_pred_residual))
+            except Exception:
+                pass
+
+            top_features_data.append((i + 1, sis_score, rmse_on_residual, formula))
+        
+        if top_features_data:
+            max_formula_len = max(len(f) for _, _, _, f in top_features_data) if top_features_data else 0
+            # Header
+            rank_w, sis_w, rmse_w = 5, 11, 15
+            header = f"    {'Rank':<{rank_w}} | {'SIS Score':<{sis_w}} | {'RMSE (on res.)':<{rmse_w}} | Formula"
+            separator = f"    {'-'*rank_w}-+-{'-'*sis_w}-+-{'-'*rmse_w}-+-{'-'*max(7, max_formula_len)}"
+            print(header)
+            print(separator)
+            # Rows
+            for rank, sis_score, rmse, formula in top_features_data:
+                print(f"    {rank:<{rank_w}} | {sis_score:<{sis_w}.4f} | {rmse:<{rmse_w}.4f} | {formula}")
+
         best_new_feature = sorted_candidates_series.index[0]
         selected_features.append(best_new_feature)
-        print(f"  Selected feature for D={D_iter}: '{best_new_feature}'")
+        formula_str = _format_feature_str(sisso_instance, best_new_feature)
+        print(f"  Selected feature for D={D_iter}: '{formula_str}'")
 
         X_current_dim_df = phi_pruned[selected_features]
         score, model_data = _score_single_model(X_current_dim_df, y, task_type, model_params, sample_weight, device, torch_device)

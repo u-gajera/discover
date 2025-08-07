@@ -1,3 +1,4 @@
+
 """
 This module contains all functions related to model evaluation, screening, and
 cross-validation. It includes:
@@ -98,10 +99,6 @@ def run_SIS(phi, y, task_type, xp=np, multitask_sis_method='average', phi_tensor
                 correlations_cpu = np.abs(correlations_gpu)
 
             correlations = pd.Series(correlations_cpu, index=phi_names)
-            if not correlations.empty:
-                print(f"  GPU SIS screening complete. Top feature: '{correlations.idxmax()}'")
-            else:
-                print("  GPU SIS screening complete. No correlated features found.")
             return correlations.dropna().sort_values(ascending=False)
         except Exception as e:
             warnings.warn(f"GPU-based SIS failed: {e}. Falling back to CPU-based SIS.")
@@ -152,9 +149,6 @@ def run_SIS(phi, y, task_type, xp=np, multitask_sis_method='average', phi_tensor
             correlations = avg_correlations.dropna().sort_values(ascending=False)
     else:
         raise ValueError(f"task_type '{task_type}' not recognized.")
-
-    if not correlations.empty:
-        print(f"  CPU SIS screening complete. Top feature: '{correlations.index[0]}'")
 
     return correlations
 
