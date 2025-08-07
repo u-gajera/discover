@@ -116,7 +116,7 @@ CUSTOM_BINARY_OP_DEFS = {
         'op_name': "<H>"
     },
     'abs_diff': {
-        'func': lambda f1, f2: np.abs(f1 - f2),
+        'func': lambda f1, f2: abs(f1 - f2), 
         'sym_func': lambda s1, s2: sympy.Abs(s1 - s2),
         'unit_op': lambda u1, u2: u1,
         'unit_check': lambda u1, u2: u1.dimensionality == u2.dimensionality,
@@ -137,7 +137,6 @@ class UFeature:
 
         vals = values.magnitude if hasattr(values, 'magnitude') else values
 
-        # FIX 1: Efficiently handle tensor creation/reuse.
         if xp == torch:
             if isinstance(vals, torch.Tensor):
                 # If it's already a tensor, just use it. No need to copy.
@@ -480,7 +479,6 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
                         expr, feat = res
                         simplified_expr = _canonicalize_expr(expr)
                         if not simplified_expr.is_Number:
-                            # FIX 2: Removed slow numerical check. Symbolic check is sufficient.
                             if simplified_expr not in candidate_features_map:
                                 candidate_features_map[simplified_expr] = feat
                                 newly_added_this_level.append(feat)
@@ -520,12 +518,10 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
                         expr, feat = res
                         simplified_expr = _canonicalize_expr(expr)
                         if not simplified_expr.is_Number:
-                            # FIX 2: Removed slow numerical check. Symbolic check is sufficient.
                             if simplified_expr not in candidate_features_map:
                                 candidate_features_map[simplified_expr] = feat
                                 newly_added_this_level.append(feat)
 
-        # FIX 3: MAJOR LOGIC FIX - The entire screening block below was incorrectly indented.
         # It must be run at every depth level.
 
         print(f"    Generated {len(newly_added_this_level)} new unique features. Total candidates: {len(candidate_features_map)}")
