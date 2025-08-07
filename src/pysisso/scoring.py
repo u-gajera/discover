@@ -64,7 +64,6 @@ def run_SIS(phi, y, task_type, xp=np, multitask_sis_method='average', phi_tensor
         try:
             phi_gpu = phi_tensor
 
-            # <<< MODIFIED BLOCK >>>: This now correctly handles dtype for both CuPy and PyTorch
             y_np = y.to_numpy() if isinstance(y, pd.Series) else np.asarray(y)
 
             if xp == torch:

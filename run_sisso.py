@@ -74,13 +74,6 @@ def run_analysis(config_path):
         print(f"Pandas failed to read the data file. Error: {e}")
         return
 
-    print("\n" + "="*20 + " DEBUGGING INFO: STAGE 1 (Raw Data) " + "="*20)
-    print("Shape of data immediately after loading:", data.shape)
-    print("First 5 rows of loaded data:\n", data.head())
-    print("\nChecking for ALL missing values (NaNs) in each column of raw data:")
-    print(data.isnull().sum())
-    print("="*68 + "\n")
-
     prop_key = config.get('property_key')
     if not prop_key or prop_key not in data.columns:
         raise ValueError(f"Config 'property_key' '{prop_key}' not found in data columns. Available columns: {data.columns.tolist()}")

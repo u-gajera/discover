@@ -71,7 +71,6 @@ def _safe_min_max(arr, xp=np):
     return amin, amax
 
 #  Operator Definitions
-# <<< MODIFIED >>>: Parametric funcs now accept 'xp' to be backend-agnostic.
 PARAMETRIC_OP_DEFS = {
     'exp-': {
         'func': lambda f, p, xp: xp.exp(-p[0] * f),
@@ -308,7 +307,6 @@ def apply_custom_binary_op(f1, f2, op_def, min_val, max_val):
     except Exception: pass
     return None
 
-# <<< MODIFIED >>>: This function now runs entirely on the device (CPU or GPU)
 # It no longer copies data to the CPU if it's already on the GPU.
 def apply_parametric_op(feature, op_def, min_val, max_val):
     """Applies a parametric operator with its initial default parameter values."""
@@ -319,12 +317,10 @@ def apply_parametric_op(feature, op_def, min_val, max_val):
         if op_def.get('domain_check') and not op_def['domain_check'](feature): return None
         if feature.ureg and op_def.get('unit_check') and not op_def['unit_check'](feature.unit): return None
 
-        # MODIFICATION: Operate directly on the device tensor (GPU or CPU)
         new_values = op_def['func'](feature.values, p_initial, xp)
 
         if not xp.all(xp.isfinite(new_values)): return None
 
-        # MODIFICATION: Use 'xp' for all numerical checks
         abs_vals = xp.abs(new_values)
         if xp.any(abs_vals < min_val) or xp.any(abs_vals > max_val): return None
         if xp.all(abs_vals < epsilon): return None
@@ -339,7 +335,6 @@ def apply_parametric_op(feature, op_def, min_val, max_val):
         op_name = list(PARAMETRIC_OP_DEFS.keys())[list(PARAMETRIC_OP_DEFS.values()).index(op_def)]
         new_name = f"{op_name}(p={p_initial})({feature.name})"
 
-        # MODIFICATION: 'new_values' is already a device tensor, no re-conversion needed
         new_feat = UFeature(new_name, new_values, new_unit, feature.ureg, new_sym_expr, feature.base_features, feature.xp, dtype=feature.values.dtype, torch_device=feature.torch_device)
         return new_feat.sym_expr, new_feat
     except Exception:
@@ -580,7 +575,6 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
         if len(top_k_names) > 1:
             print(f"    Filtering {len(top_k_names)} top-scoring features to remove redundancies.")
             if is_gpu_run:
-                # <<< MODIFIED >>>: This block now performs redundancy filtering entirely on the GPU
                 # to avoid a costly GPU->CPU transfer of the correlation matrix.
                 top_k_indices = [candidate_names.index(n) for n in top_k_names]
                 top_k_tensor = phi_tensor[:, top_k_indices]
