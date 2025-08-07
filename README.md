@@ -1,7 +1,7 @@
 
-# pySISSO: A Python Implementation of Sure Independence Screening and Sparsifying Operator
+# DISCOVER: A Python Implementation of Sure Independence Screening and Sparsifying Operator
 
-**pySISSO** is a modern, Python-native implementation of the Sure Independence Screening and Sparsifying Operator (SISSO) method, a powerful machine learning framework for discovering predictive, interpretable models and descriptors from large feature spaces. This implementation is designed for ease of use, extensibility, and performance, incorporating modern best practices and algorithmic enhancements.
+**DISCOVER** is a modern, Python-native implementation of the Sure Independence Screening and Sparsifying Operator (SISSO) method, a powerful machine learning framework for discovering predictive, interpretable models and descriptors from large feature spaces. This implementation is designed for ease of use, extensibility, and performance, incorporating modern best practices and algorithmic enhancements.
 
 This tool is ideal for researchers and data scientists in materials science, chemistry, and other scientific domains who need to find physically meaningful relationships in their data.
 
@@ -176,7 +176,7 @@ The project is organized into several modules, each with a specific responsibili
 
   * `run_sisso.py`: The main command-line interface to drive the analysis.
   * `config.json`: The central configuration file for setting up a run.
-  * `pysisso/`: The main package directory.
+  * `discover/`: The main package directory.
       * `models.py`: Contains the primary user-facing `SISSO` classes, which orchestrate the entire workflow.
       * `features.py`: Handles the generation of the feature space from primary features and mathematical operators.
       * `search.py`: Implements the different search strategies (Greedy, SISSO++, OMP, etc.).

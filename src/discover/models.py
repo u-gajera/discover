@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-This module contains the primary user-facing classes of the pySISSO package.
+This module contains the primary user-facing classes of the DISCOVER package.
 It defines the `SISSOBase` class, which orchestrates the entire workflow from
 feature generation to model selection, and the Scikit-learn compatible wrapper
 classes (`SISSORegressor`, `SISSOClassifier`, etc.).
@@ -729,7 +729,7 @@ class SISSOBase(BaseEstimator):
             search_strat_str = "Geometric Greedy"
 
         report_lines = [
-            "pySISSO Summary", "=================", f"TASK_TYPE: {self.task_type_}",
+            "DISCOVER Summary", "=================", f"TASK_TYPE: {self.task_type_}",
             f"MODEL_SELECTION_METHOD: {selection_str}", f"SELECTED_DIMENSION: {self.best_D_}",
             f"SEARCH_STRATEGY: {search_strat_str}",
             f"PARAMETRIC_MODEL_FOUND: {'YES' if final_model_is_parametric else 'NO'}",

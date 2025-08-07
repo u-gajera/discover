@@ -21,17 +21,17 @@ import numpy as np
 import sympy
 
 # This setup assumes the script is run from the project directory
-# and the package is in `src/pysisso`.
+# and the package is in `src/discover`.
 sys.path.insert(0, str(Path(__file__).parent / 'src'))
 
-from pysisso import (
+from discover import (
     SISSORegressor,
     SISSOClassifier,
     SISSOLogRegressor,
     SISSOCHClassifier,
     print_descriptor_formula # Import the formatter
 )
-from pysisso.features import generate_features_iteratively # Need to import this for the return type
+from discover.features import generate_features_iteratively # Need to import this for the return type
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score, mean_squared_error
 
@@ -206,7 +206,7 @@ def run_analysis(config_path):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Python-native Sure Independence Screening and Sparsifying Operator (pySISSO)")
+    parser = argparse.ArgumentParser(description="Python-native Sure Independence Screening and Sparsifying Operator (DISCOVER)")
     parser.add_argument('config_file', help="Path to the JSON configuration file.")
     args = parser.parse_args()
     run_analysis(args.config_file)

@@ -12,8 +12,8 @@ try:
 except ImportError:
     PLOTTING_AVAILABLE = False
 
-# Assuming the pysisso package is in the current directory or installed
-from pysisso import SISSORegressor
+# Assuming the discover package is in the current directory or installed
+from discover import SISSORegressor
 
 # --- Configuration for the Comparison Test ---
 
@@ -129,7 +129,7 @@ def run_comparison_test():
     """
     # 1. Setup and Pre-flight Checks
     print("="*60)
-    print("--- Starting pySISSO Comparison Test ---")
+    print("--- Starting DISCOVER Comparison Test ---")
     print("="*60)
 
     # Check for Gurobi and add 'miqp' strategy if available

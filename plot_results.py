@@ -173,7 +173,7 @@ def _parse_coef_vector(coefs: Sequence[float], D: int,
                        fix_intercept: bool) -> Tuple[float, np.ndarray]:
     """Return (intercept, coef_vector) from stored coefficients.
 
-    Convention used in pySISSO summary: when ``fix_intercept`` is *False*, the
+    Convention used in DISCOVER summary: when ``fix_intercept`` is *False*, the
     *first* element in the coefficient array is the intercept. Otherwise there is
     no intercept and the array length should equal D.
     """
@@ -378,7 +378,7 @@ def _mode_sisso_D(workdir: Path, Xdf: pd.DataFrame, y: pd.Series,
 # Main CLI
 
 def main(argv: Optional[Sequence[str]] = None):
-    parser = argparse.ArgumentParser(description="Plot results from a pySISSO run.")
+    parser = argparse.ArgumentParser(description="Plot results from a DISCOVER run.")
     parser.add_argument('workdir', help="Working directory produced by run_sisso.py")
     parser.add_argument('data_file', help="Training data CSV used in the SISSO run")
     parser.add_argument('--mode', choices=['best','sis','sisso'], default='best', help="Plotting mode. See script header.")
