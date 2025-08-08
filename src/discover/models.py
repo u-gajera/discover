@@ -238,11 +238,21 @@ class SISSOBase(BaseEstimator):
             self.xp_ = cp
             if cp: cp.cuda.Device(self.gpu_id).use()
         elif self.device == 'mps':
-            if not MPS_AVAILABLE: raise ImportError("device='mps' requires a torch installation on an Apple Silicon machine.")
-            self.xp_, self.torch_device_ = torch, torch.device("mps")
-            if self.dtype == 'float64':
-                warnings.warn("MPS device does not support float64. Forcing dtype to 'float32' for this run.")
-                self.dtype = 'float32'
+                    if not MPS_AVAILABLE:
+                        # Construct a more helpful error message
+                        error_message = (
+                            "device='mps' requires a PyTorch installation with MPS support on an Apple Silicon Mac.\n"
+                            "It seems PyTorch is not installed or is not a compatible version.\n\n"
+                            "To fix this, please install the latest version of PyTorch by running:\n"
+                            "    pip install torch torchvision torchaudio\n\n"
+                            "Make sure you are running this command in your project's virtual environment."
+                        )
+                        raise ImportError(error_message)
+                    
+                    self.xp_, self.torch_device_ = torch, torch.device("mps")
+                    if self.dtype == 'float64':
+                        warnings.warn("MPS device does not support float64. Forcing dtype to 'float32' for this run.")
+                        self.dtype = 'float32'
         else: self.xp_ = np
         if np.dtype(self.dtype).type == np.float32:
             f32_max = np.finfo(np.float32).max
