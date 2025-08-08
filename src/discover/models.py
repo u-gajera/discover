@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 This module contains the primary user-facing classes of the DISCOVER package.
-It defines the `SISSOBase` class, which orchestrates the entire workflow from
+It defines the `DiscoverBase` class, which orchestrates the entire workflow from
 feature generation to model selection, and the Scikit-learn compatible wrapper
 classes (`DiscoverRegressor`, `DiscoverClassifier`, etc.).
 
@@ -95,7 +95,7 @@ class _BootstrapOutOfBagSplitter:
             yield train_idx, test_idx
 
 
-class SISSOBase(BaseEstimator):
+class DiscoverBase(BaseEstimator):
     """
     Base class for SISSO models, handling configuration, workflow orchestration,
     and results management.
@@ -180,7 +180,6 @@ class SISSOBase(BaseEstimator):
         if self.selection_method not in valid_selection_methods:
             raise ValueError(f"selection_method must be one of {valid_selection_methods}")
         
-        # NEW: Add parameter for degeneracy epsilon
         self.sis_score_degeneracy_epsilon = config.get('sis_score_degeneracy_epsilon', 1e-4)
             
         self.n_bootstrap = config.get('n_bootstrap', 30)
@@ -214,7 +213,6 @@ class SISSOBase(BaseEstimator):
             'max_feat_cross_correlation': self.max_feat_cross_correlation, 'loss': self.loss,
             'fix_intercept_': self.fix_intercept_, 'alpha': self.alpha, 'C_svm': self.C_svm,
             'C_logreg': self.C_logreg, 'selection_method': self.selection_method,
-            # NEW: Expose the epsilon parameter
             'sis_score_degeneracy_epsilon': self.sis_score_degeneracy_epsilon,
             'n_bootstrap': self.n_bootstrap, 'cv': self.cv, 'cv_score_tolerance': self.cv_score_tolerance,
             'cv_min_improvement': self.cv_min_improvement, 'n_jobs': self.n_jobs, 'device': self.device,
@@ -796,22 +794,22 @@ class SISSOBase(BaseEstimator):
         return plot_utils.plot_partial_dependence(self, X, features_to_plot, **kwargs)
 
 
-class DiscoverRegressor(SISSOBase, RegressorMixin):
+class DiscoverRegressor(DiscoverBase, RegressorMixin):
     def __init__(self, **kwargs):
         kwargs.setdefault('calc_type', 'regression')
         super().__init__(**kwargs)
 
-class DiscoverClassifier(SISSOBase, ClassifierMixin):
+class DiscoverClassifier(DiscoverBase, ClassifierMixin):
     def __init__(self, **kwargs):
         kwargs.setdefault('calc_type', 'classification_svm')
         super().__init__(**kwargs)
 
-class DiscoverLogRegressor(SISSOBase, ClassifierMixin):
+class DiscoverLogRegressor(DiscoverBase, ClassifierMixin):
     def __init__(self, **kwargs):
         kwargs.setdefault('calc_type', 'classification_logreg')
         super().__init__(**kwargs)
 
-class DiscoverCHClassifier(SISSOBase, ClassifierMixin):
+class DiscoverCHClassifier(DiscoverBase, ClassifierMixin):
     def __init__(self, **kwargs):
         kwargs.setdefault('calc_type', 'ch_classification')
         super().__init__(**kwargs)

@@ -50,16 +50,16 @@ except ImportError:
         @staticmethod
         def cos(arr): return np.cos(arr)
 
-# Pint -------------------------------------------------------------------------------------------
+# Pint -----------------------------------------------------------------
 try:
     import pint
     PINT_AVAILABLE = True
 except ImportError:
     PINT_AVAILABLE = False
 
-# ------------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------
 # Utility helpers
-# ------------------------------------------------------------------------------------------------
+# ------------------------------------------------------------------------
 
 def _safe_min_max(arr, xp=np):
     if xp == torch:
@@ -126,8 +126,8 @@ CUSTOM_BINARY_OP_DEFS = {
 }
 #  Feature Generation (with Unit-Awareness and Operator Control)
 class UFeature:
-    """A wrapper for features that includes name, values, units, symbolic expression, and base features."""
-    def __init__(self, name, values, unit, ureg, sym_expr, base_features, xp=np, dtype=np.float64, torch_device=None):
+    def __init__(self, name, values, unit, ureg, sym_expr, 
+                 base_features, xp=np, dtype=np.float64, torch_device=None):
         self.name = name
         self.xp = xp
         self.torch_device = torch_device
@@ -155,8 +155,10 @@ class UFeature:
         self.min_val = self.xp.min(self.values)
         self.max_val = self.xp.max(self.values)
 
-    def _apply_binary_op(self, other, op_func, sym_op_func, op_name, unit_op=None, unit_check=None, domain_check=None):
-         if self.ureg and unit_check and not unit_check(self.unit, other.unit): return None
+    def _apply_binary_op(self, other, op_func, sym_op_func, op_name, unit_op=None, 
+                         unit_check=None, domain_check=None):
+         if self.ureg and unit_check and not unit_check(self.unit, 
+                                                        other.unit): return None
          if domain_check and not domain_check(self, other): return None
 
          if not self.ureg:
@@ -165,25 +167,36 @@ class UFeature:
                   new_sym_expr = sym_op_func(self.sym_expr, other.sym_expr)
                   new_name = f"({self.name}{op_name}{other.name})"
                   new_base_features = self.base_features.union(other.base_features)
-                  return UFeature(new_name, new_values, None, self.ureg, new_sym_expr, new_base_features, self.xp, dtype=self.values.dtype, torch_device=self.torch_device)
+                  return UFeature(new_name, new_values, None, self.ureg, 
+                                  new_sym_expr, new_base_features, self.xp, 
+                                  dtype=self.values.dtype, 
+                                  torch_device=self.torch_device)
               except: return None
          try:
-            new_unit = unit_op(self.unit, other.unit) if unit_op else op_func(self.unit, other.unit)
+            new_unit = unit_op(self.unit, other.unit) if unit_op else op_func(self.unit, 
+                                                                            other.unit)
             new_values = op_func(self.values, other.values)
             new_sym_expr = sym_op_func(self.sym_expr, other.sym_expr)
             new_name = f"({self.name}{op_name}{other.name})"
             new_base_features = self.base_features.union(other.base_features)
-            return UFeature(new_name, new_values, new_unit, self.ureg, new_sym_expr, new_base_features, self.xp, dtype=self.values.dtype, torch_device=self.torch_device)
-         except (pint.DimensionalityError, ValueError, TypeError, OverflowError): return None
+            return UFeature(new_name, new_values, new_unit, self.ureg, new_sym_expr, 
+                            new_base_features, self.xp, dtype=self.values.dtype, 
+                            torch_device=self.torch_device)
+         except (pint.DimensionalityError, ValueError, TypeError, 
+                            OverflowError): return None
 
-    def __add__(self, other): return self._apply_binary_op(other, lambda a, b: a + b, lambda a, b: a + b, '+')
-    def __sub__(self, other): return self._apply_binary_op(other, lambda a, b: a - b, lambda a, b: a - b, '-')
-    def __mul__(self, other): return self._apply_binary_op(other, lambda a, b: a * b, lambda a, b: a * b, '*')
+    def __add__(self, other): return self._apply_binary_op(other, 
+                                        lambda a, b: a + b, lambda a, b: a + b, '+')
+    def __sub__(self, other): return self._apply_binary_op(other, 
+                                        lambda a, b: a - b, lambda a, b: a - b, '-')
+    def __mul__(self, other): return self._apply_binary_op(other, 
+                                        lambda a, b: a * b, lambda a, b: a * b, '*')
     def __truediv__(self, other):
         if other.has_zero: return None
         return self._apply_binary_op(other, lambda a, b: a / b, lambda a, b: a / b, '/')
 
-    def _apply_unary_op(self, val_op, unit_op, sym_op, name_func, unit_check=None, domain_check=None):
+    def _apply_unary_op(self, val_op, unit_op, sym_op, name_func, 
+                        unit_check=None, domain_check=None):
         if self.xp == torch: finfo = torch.finfo(self.values.dtype)
         else: finfo = self.xp.finfo(self.values.dtype)
         if self.max_val > finfo.max / 2 or self.min_val < finfo.min / 2:
@@ -198,24 +211,47 @@ class UFeature:
             new_sym_expr = sym_op(self.sym_expr)
             new_name = name_func(self.name)
             new_base_features = self.base_features
-            return UFeature(new_name, new_values, new_unit, self.ureg, new_sym_expr, new_base_features, self.xp, dtype=self.values.dtype, torch_device=self.torch_device)
-        except (ValueError, TypeError, pint.DimensionalityError, OverflowError): return None
+            return UFeature(new_name, new_values, new_unit, self.ureg, new_sym_expr, 
+                            new_base_features, self.xp, dtype=self.values.dtype, 
+                            torch_device=self.torch_device)
+        except (ValueError, TypeError, pint.DimensionalityError, 
+                            OverflowError): return None
 
     def power(self, p):
         if p != int(p) and not self.is_positive : return None
         if self.has_zero and p < 0: return None
-        return self._apply_unary_op(lambda a: a**p, lambda u: u**p, lambda s: s**p, lambda n: f"({n})**{p}")
+        return self._apply_unary_op(lambda a: a**p, lambda u: u**p, 
+                                    lambda s: s**p, lambda n: f"({n})**{p}")
 
-    def sqrt(self): return self._apply_unary_op(lambda a: self.xp.sqrt(a), lambda u: u**0.5, sympy.sqrt, lambda n: f"sqrt({n})", domain_check=lambda s: s.is_positive or s.has_zero)
-    def cbrt(self): return self._apply_unary_op(lambda a: a.cbrt() if self.xp==torch else self.xp.cbrt(a), lambda u: u**(1/3.), sympy.cbrt, lambda n: f"cbrt({n})")
-    def abs(self):  return self._apply_unary_op(self.xp.abs, lambda u: u, sympy.Abs, lambda n: f"Abs({n})")
-    def inv(self):  return self._apply_unary_op(lambda a: 1.0/a, lambda u: 1.0/u, lambda s: 1/s, lambda n: f"1/({n})", domain_check=lambda s: not s.has_zero)
-    def sign(self): return self._apply_unary_op(self.xp.sign, lambda u: u, sympy.sign, lambda n: f"sign({n})", unit_check=lambda u: u.dimensionless)
-    def log(self): return self._apply_unary_op(self.xp.log, lambda u: u, sympy.log, lambda n: f"log({n})", unit_check=lambda u: u.dimensionless, domain_check=lambda s: s.is_positive)
-    def exp(self): return self._apply_unary_op(self.xp.exp, lambda u: u, sympy.exp, lambda n: f"exp({n})", unit_check=lambda u: u.dimensionless)
-    def exp_neg(self): return self._apply_unary_op(lambda a: self.xp.exp(-a), lambda u: u, lambda s: sympy.exp(-s), lambda n: f"exp(-{n})", unit_check=lambda u: u.dimensionless)
-    def sin(self): return self._apply_unary_op(self.xp.sin, lambda u: u, sympy.sin, lambda n: f"sin({n})", unit_check=lambda u: u.dimensionless)
-    def cos(self): return self._apply_unary_op(self.xp.cos, lambda u: u, sympy.cos, lambda n: f"cos({n})", unit_check=lambda u: u.dimensionless)
+    def sqrt(self): return self._apply_unary_op(lambda a: self.xp.sqrt(a), 
+                            lambda u: u**0.5, sympy.sqrt, lambda n: f"sqrt({n})", 
+                            domain_check=lambda s: s.is_positive or s.has_zero)
+    def cbrt(self): return self._apply_unary_op(lambda a: a.cbrt() if self.xp==torch else self.xp.cbrt(a), 
+                            lambda u: u**(1/3.), sympy.cbrt, lambda n: f"cbrt({n})")
+    def abs(self):  return self._apply_unary_op(self.xp.abs, lambda u: u, sympy.Abs, 
+                                                lambda n: f"Abs({n})")
+    def inv(self):  return self._apply_unary_op(lambda a: 1.0/a, lambda u: 1.0/u, 
+                            lambda s: 1/s, lambda n: f"1/({n})", 
+                            domain_check=lambda s: not s.has_zero)
+    def sign(self): return self._apply_unary_op(self.xp.sign, 
+                            lambda u: u, sympy.sign, lambda n: f"sign({n})", 
+                            unit_check=lambda u: u.dimensionless)
+    def log(self): return self._apply_unary_op(self.xp.log, lambda u: u, sympy.log, 
+                            lambda n: f"log({n})", unit_check=lambda u: u.dimensionless, 
+                            domain_check=lambda s: s.is_positive)
+    def exp(self): return self._apply_unary_op(self.xp.exp, lambda u: u, sympy.exp, 
+                            lambda n: f"exp({n})", 
+                            unit_check=lambda u: u.dimensionless)
+    def exp_neg(self): return self._apply_unary_op(lambda a: self.xp.exp(-a), 
+                            lambda u: u, lambda s: sympy.exp(-s), 
+                            lambda n: f"exp(-{n})", 
+                            unit_check=lambda u: u.dimensionless)
+    def sin(self): return self._apply_unary_op(self.xp.sin, lambda u: u, 
+                            sympy.sin, lambda n: f"sin({n})", 
+                            unit_check=lambda u: u.dimensionless)
+    def cos(self): return self._apply_unary_op(self.xp.cos, lambda u: u, 
+                            sympy.cos, lambda n: f"cos({n})", 
+                            unit_check=lambda u: u.dimensionless)
 
     @staticmethod
     def get_all_unary_op_names():
@@ -231,7 +267,8 @@ class UFeature:
            'sqrt': self.sqrt, 'cbrt': self.cbrt, 'abs': self.abs, 'log': self.log,
            'exp': self.exp, 'exp-': self.exp_neg, 'sin': self.sin, 'cos': self.cos,
            'inv': self.inv, 'sign': self.sign,
-           'sq': lambda: self.power(2), 'cb': lambda: self.power(3), 'pow6': lambda: self.power(6),
+           'sq': lambda: self.power(2), 'cb': lambda: self.power(3), 
+           'pow6': lambda: self.power(6),
            'pow-2': lambda: self.power(-2), 'pow-3': lambda: self.power(-3),
            'pow0.5': self.sqrt, 'pow-0.5': lambda: self.power(-0.5)
         }
@@ -243,7 +280,8 @@ class UFeature:
 
     @staticmethod
     def get_binary_op_method_name(op_name):
-        return {'add': '__add__', 'sub': '__sub__', 'mul': '__mul__', 'div': '__truediv__'}.get(op_name)
+        return {'add': '__add__', 'sub': '__sub__', 'mul': '__mul__', 
+                'div': '__truediv__'}.get(op_name)
 
 
 def apply_op(f, op_func, min_val, max_val):
@@ -338,7 +376,10 @@ def apply_parametric_op(feature, op_def, min_val, max_val):
         op_name = list(PARAMETRIC_OP_DEFS.keys())[list(PARAMETRIC_OP_DEFS.values()).index(op_def)]
         new_name = f"{op_name}(p={p_initial})({feature.name})"
 
-        new_feat = UFeature(new_name, new_values, new_unit, feature.ureg, new_sym_expr, feature.base_features, feature.xp, dtype=feature.values.dtype, torch_device=feature.torch_device)
+        new_feat = UFeature(new_name, new_values, new_unit, feature.ureg, 
+                            new_sym_expr, feature.base_features, feature.xp, 
+                            dtype=feature.values.dtype, 
+                            torch_device=feature.torch_device)
         return new_feat.sym_expr, new_feat
     except Exception:
         return None
@@ -410,7 +451,8 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
                                   n_jobs, use_cache, workdir, op_rules, parametric_ops,
                                   min_abs_feat_val, max_abs_feat_val, interaction_only,
                                   task_type, multitask_sis_method,
-                                  unary_rungs=1, xp=np, dtype=np.float64, torch_device=None):
+                                  unary_rungs=1, xp=np, dtype=np.float64, 
+                                  torch_device=None):
     """Breadth-first SIS-driven feature generator (feature-space only)."""
     from .scoring import run_SIS  # local import to avoid circular
 
@@ -437,7 +479,8 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
         if original_name not in primary_units and ureg:
             warnings.warn(f"No unit defined for '{original_name}'. Treating as dimensionless.")
         initial_features.append(UFeature(original_name, X_clean[name].values, unit, ureg,
-                                         primary_symbols[i], {original_name}, xp, dtype, torch_device))
+                                         primary_symbols[i], {original_name}, 
+                                         xp, dtype, torch_device))
 
     device_name = "CPU"
     if xp == cp: device_name = "NVIDIA GPU"
@@ -552,14 +595,15 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
                 phi_tensor=phi_tensor, phi_names=candidate_names
             )
         else: # Original CPU path
-            temp_values_dict = {name: feat.values for name, feat in zip(candidate_names, candidate_features_map.values())}
+            temp_values_dict = {name: feat.values for name, feat in zip(candidate_names, 
+                                                    candidate_features_map.values())}
             temp_phi_df = pd.DataFrame(temp_values_dict, index=X.index)
-            sorted_scores_series = run_SIS(temp_phi_df, y, task_type, xp=xp, multitask_sis_method=multitask_sis_method)
+            sorted_scores_series = run_SIS(temp_phi_df, y, task_type, xp=xp, 
+                                           multitask_sis_method=multitask_sis_method)
 
         if not isinstance(sorted_scores_series, pd.Series) or sorted_scores_series.empty:
             print("  SIS screening returned no features. Stopping."); break
         
-        # --- MODIFIED: Print top 5 features with formulas, RMSE, and R2 ---
         print(f"  SIS screening complete. Top features at this depth:")
         top_features_data = []
         y_np = y.values if isinstance(y, pd.Series) else y

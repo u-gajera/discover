@@ -17,7 +17,7 @@
   "non_feature_cols":        [],
   
   "//": "Name of the output directory where all results, models, and plots will be saved.",
-  "workdir":                 "sisso_master_run",
+  "workdir":                 "master_run",
   
   "//": "If true, saves the full generated feature space (phi-space) as a compressed CSV.",
   "//": "WARNING: This file can be very large.",
