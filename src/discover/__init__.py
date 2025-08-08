@@ -1,5 +1,5 @@
 """
-DISCOVER: A Python Implementation of Sure Independence Screening and Sparsifying Operator
+DISCOVER: A Python Implementation of Data-Informed Symbolic Combination of Operators for Variable Equation Regression
 ========================================================
 DISCOVER package initialiser.
 
@@ -14,17 +14,17 @@ Example – quick start:
     >>> run_from_config("config_mohsen.json")
 """
 from .models import (
-    SISSORegressor,
-    SISSOClassifier,
-    SISSOLogRegressor,
-    SISSOCHClassifier
+    DiscoverRegressor,
+    DiscoverClassifier,
+    DiscoverLogRegressor,
+    DiscoverCHClassifier
 )
 from .utils import print_descriptor_formula
 
 __all__ = [
-    'SISSORegressor',
-    'SISSOClassifier',
-    'SISSOLogRegressor',
-    'SISSOCHClassifier',
+    'DiscoverRegressor',
+    'DiscoverClassifier',
+    'DiscoverLogRegressor',
+    'DiscoverCHClassifier',
     'print_descriptor_formula'
 ]

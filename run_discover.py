@@ -2,7 +2,7 @@
 CLI driver that glues everything together.
 
 Typical session:
-    $ python run_sisso.py config_mohsen.json
+    $ python run_discover.py config_mohsen.json
     ├── Builds feature pool
     ├── Runs SIS + SO loops up to D_max
     └── Writes results:  final_models_summary.json, top_sis_candidates.csv, …
@@ -25,10 +25,10 @@ import sympy
 sys.path.insert(0, str(Path(__file__).parent / 'src'))
 
 from discover import (
-    SISSORegressor,
-    SISSOClassifier,
-    SISSOLogRegressor,
-    SISSOCHClassifier,
+    DiscoverRegressor,
+    DiscoverClassifier,
+    DiscoverLogRegressor,
+    DiscoverCHClassifier,
     print_descriptor_formula # Import the formatter
 )
 from discover.features import generate_features_iteratively # Need to import this for the return type
@@ -97,15 +97,15 @@ def run_analysis(config_path):
 
     # --- 5. Initialize and Run the Correct SISSO Model ---
     task_map = {
-        'regression': SISSORegressor, 'multitask': SISSORegressor,
-        'classification_svm': SISSOClassifier, 'classification_logreg': SISSOLogRegressor,
-        'ch_classification': SISSOCHClassifier, 'convex_hull': SISSOCHClassifier,
-        'classification': SISSOClassifier,
+        'regression': DiscoverRegressor, 'multitask': DiscoverRegressor,
+        'classification_svm': DiscoverClassifier, 'classification_logreg': DiscoverLogRegressor,
+        'ch_classification': DiscoverCHClassifier, 'convex_hull': DiscoverCHClassifier,
+        'classification': DiscoverClassifier,
     }
     task_key = config.get('task_type', config.get('calc_type', 'regression')).lower()
     SissoClass = task_map.get(task_key)
     
-    print("\n--- Initializing and running SISSO ---")
+    print("\n--- Initializing and running DISCOVER ---")
     sisso = SissoClass(**config)
     
     try:
@@ -189,7 +189,7 @@ def run_analysis(config_path):
     models_summary_path = workdir / "final_models_summary.json"
     with open(models_summary_path, 'w') as f:
         json.dump(models_summary, f, indent=2)
-    print(f"  Saved final SISSO models summary to '{models_summary_path}'")
+    print(f"  Saved final DISCOVER models summary to '{models_summary_path}'")
 
     # --- C. Save Symbol Map ---
     clean_map_str = {str(k): str(v) for k, v in sisso.sym_clean_to_original_map_.items()}
@@ -206,7 +206,7 @@ def run_analysis(config_path):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description="Python-native Sure Independence Screening and Sparsifying Operator (DISCOVER)")
+    parser = argparse.ArgumentParser(description="Python-native Data-Informed Symbolic Combination of Operators for Variable Equation Regression (DISCOVER)")
     parser.add_argument('config_file', help="Path to the JSON configuration file.")
     args = parser.parse_args()
     run_analysis(args.config_file)

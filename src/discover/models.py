@@ -3,7 +3,7 @@
 This module contains the primary user-facing classes of the DISCOVER package.
 It defines the `SISSOBase` class, which orchestrates the entire workflow from
 feature generation to model selection, and the Scikit-learn compatible wrapper
-classes (`SISSORegressor`, `SISSOClassifier`, etc.).
+classes (`DiscoverRegressor`, `DiscoverClassifier`, etc.).
 
 Lightweight linear-model wrapper for a SISSO descriptor.
 
@@ -796,22 +796,22 @@ class SISSOBase(BaseEstimator):
         return plot_utils.plot_partial_dependence(self, X, features_to_plot, **kwargs)
 
 
-class SISSORegressor(SISSOBase, RegressorMixin):
+class DiscoverRegressor(SISSOBase, RegressorMixin):
     def __init__(self, **kwargs):
         kwargs.setdefault('calc_type', 'regression')
         super().__init__(**kwargs)
 
-class SISSOClassifier(SISSOBase, ClassifierMixin):
+class DiscoverClassifier(SISSOBase, ClassifierMixin):
     def __init__(self, **kwargs):
         kwargs.setdefault('calc_type', 'classification_svm')
         super().__init__(**kwargs)
 
-class SISSOLogRegressor(SISSOBase, ClassifierMixin):
+class DiscoverLogRegressor(SISSOBase, ClassifierMixin):
     def __init__(self, **kwargs):
         kwargs.setdefault('calc_type', 'classification_logreg')
         super().__init__(**kwargs)
 
-class SISSOCHClassifier(SISSOBase, ClassifierMixin):
+class DiscoverCHClassifier(SISSOBase, ClassifierMixin):
     def __init__(self, **kwargs):
         kwargs.setdefault('calc_type', 'ch_classification')
         super().__init__(**kwargs)

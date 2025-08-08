@@ -12,7 +12,7 @@
   "non_feature_cols": [
     "materials"
   ],
-  "workdir":                 "mohsen_data",
+  "workdir":                 "discover_output",
   "save_feature_space":      true,
   "use_cache":               true,
 

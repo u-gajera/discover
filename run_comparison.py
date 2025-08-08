@@ -13,7 +13,7 @@ except ImportError:
     PLOTTING_AVAILABLE = False
 
 # Assuming the discover package is in the current directory or installed
-from discover import SISSORegressor
+from discover import DiscoverRegressor
 
 # --- Configuration for the Comparison Test ---
 
@@ -192,7 +192,7 @@ def run_comparison_test():
             start_time = time.monotonic()
             
             try:
-                sisso = SISSORegressor(**run_config)
+                sisso = DiscoverRegressor(**run_config)
                 sisso.fit(X, y)
                 
                 end_time = time.monotonic()

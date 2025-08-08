@@ -8,7 +8,7 @@
   "//": "===================================================================",
   
   "//": "Path to your input data file (CSV format).",
-  "data_file":               "SISSO_Sample_Dataset.csv",
+  "data_file":               "Sample_Dataset.csv",
   
   "//": "The exact column name of the target property you want to predict.",
   "property_key":            "Target_U (eV)",

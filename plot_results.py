@@ -1,9 +1,9 @@
 """
-Plot best model for each descriptor dimension: python plot_results.py mohsen_data train.csv
+Plot best model for each descriptor dimension: python plot_results.py discover_output train.csv
 
-Plot top N SIS candidates (univariate regressions): python plot_results.py mohsen_data train.csv --mode sis --top 3
+Plot top N SIS candidates (univariate regressions): python plot_results.py discover_output train.csv --mode sis --top 3
 
-Plot the SISSO model for a specific dimension: python plot_results.py mohsen_data train.csv --mode sisso --dimension 2
+Plot the DISCOVER model for a specific dimension: python plot_results.py discover_output train.csv --mode discover --dimension 2
 """
 
 from __future__ import annotations
@@ -336,7 +336,7 @@ def _mode_sis_topN(workdir: Path, data_path: Path, Xdf: pd.DataFrame,
     print(f"Saved: {out_all}")
 
 
-def _mode_sisso_D(workdir: Path, Xdf: pd.DataFrame, y: pd.Series, 
+def _mode_discover_D(workdir: Path, Xdf: pd.DataFrame, y: pd.Series, 
                   D_req: int, show: bool, write_individual: bool, y_name: str = 'y'):
     summary_path = workdir / 'final_models_summary.json'
     symmap_path = workdir / 'symbol_map.json'
@@ -365,7 +365,7 @@ def _mode_sisso_D(workdir: Path, Xdf: pd.DataFrame, y: pd.Series,
     formula_title = _linear_formula_string(exprs, coefs, intercept, y_name=y_name)
     fig, ax = _parity_plot(y, y_pred, formula_title)
     fig.tight_layout()
-    out_path = workdir / f'parity_sisso_D{D_req}.png'
+    out_path = workdir / f'parity_discover_D{D_req}.png'
     fig.savefig(out_path, dpi=300)
     if show:
         plt.show()
@@ -379,11 +379,11 @@ def _mode_sisso_D(workdir: Path, Xdf: pd.DataFrame, y: pd.Series,
 
 def main(argv: Optional[Sequence[str]] = None):
     parser = argparse.ArgumentParser(description="Plot results from a DISCOVER run.")
-    parser.add_argument('workdir', help="Working directory produced by run_sisso.py")
-    parser.add_argument('data_file', help="Training data CSV used in the SISSO run")
-    parser.add_argument('--mode', choices=['best','sis','sisso'], default='best', help="Plotting mode. See script header.")
+    parser.add_argument('workdir', help="Working directory produced by run_discover.py")
+    parser.add_argument('data_file', help="Training data CSV used in the DISCOVER run")
+    parser.add_argument('--mode', choices=['best','sis','discover'], default='best', help="Plotting mode. See script header.")
     parser.add_argument('--top', type=int, default=3, help="Top N SIS candidates to plot (mode sis).")
-    parser.add_argument('--dimension','-D', type=int, default=None, help="Descriptor dimension to plot (mode sisso).")
+    parser.add_argument('--dimension','-D', type=int, default=None, help="Descriptor dimension to plot (mode discover).")
     parser.add_argument('-y','--property-key', default='property', help="Name of target column in data file.")
     parser.add_argument('--show', action='store_true', help="Display figures interactively in addition to saving.")
     parser.add_argument('--no-individual', action='store_true', help="Skip writing individual PNGs (only combined figure).")
@@ -404,10 +404,10 @@ def main(argv: Optional[Sequence[str]] = None):
         _mode_best_allD(workdir, Xdf, y, show=args.show, write_individual=write_individual, y_name=args.property_key)
     elif args.mode == 'sis':
         _mode_sis_topN(workdir, data_path, Xdf, y, top=args.top, show=args.show, write_individual=write_individual, y_name=args.property_key)
-    elif args.mode == 'sisso':
+    elif args.mode == 'discover':
         if args.dimension is None:
-            parser.error("--mode sisso requires --dimension")
-        _mode_sisso_D(workdir, Xdf, y, D_req=args.dimension, show=args.show, write_individual=write_individual, y_name=args.property_key)
+            parser.error("--mode discover requires --dimension")
+        _mode_discover_D(workdir, Xdf, y, D_req=args.dimension, show=args.show, write_individual=write_individual, y_name=args.property_key)
     else:
         raise RuntimeError("Unhandled mode")
 
