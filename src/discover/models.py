@@ -97,7 +97,7 @@ class _BootstrapOutOfBagSplitter:
 
 class DiscoverBase(BaseEstimator):
     """
-    Base class for SISSO models, handling configuration, workflow orchestration,
+    Base class for DISCOVER models, handling configuration, workflow orchestration,
     and results management.
     """
     def __init__(self, **kwargs):

@@ -37,7 +37,7 @@ from sklearn.metrics import r2_score, mean_squared_error
 
 
 def run_analysis(config_path):
-    """Core logic to run SISSO based on a config file."""
+    """Core logic to run DISCOVER based on a config file."""
     # --- 1. Load Configuration ---
     print(f"--- Loading configuration from '{config_path}' ---")
     try:
@@ -49,7 +49,7 @@ def run_analysis(config_path):
         return
 
     # --- 2. Prepare Directories ---
-    workdir = Path(config.get('workdir', 'sisso_output'))
+    workdir = Path(config.get('workdir', 'discover_output'))
     if workdir.exists():
         if input(f"Workdir '{workdir}' already exists. Overwrite? (y/N): ").lower() != 'y':
             print("Aborting."); return
@@ -95,7 +95,7 @@ def run_analysis(config_path):
     print(f"\nTarget property: '{prop_key}'")
     print(f"Final primary features ({len(X.columns)}) being used for this run:\n  {', '.join(X.columns)}")
 
-    # --- 5. Initialize and Run the Correct SISSO Model ---
+    # --- 5. Initialize and Run the Correct DISCOVER Model ---
     task_map = {
         'regression': DiscoverRegressor, 'multitask': DiscoverRegressor,
         'classification_svm': DiscoverClassifier, 'classification_logreg': DiscoverLogRegressor,
@@ -103,15 +103,15 @@ def run_analysis(config_path):
         'classification': DiscoverClassifier,
     }
     task_key = config.get('task_type', config.get('calc_type', 'regression')).lower()
-    SissoClass = task_map.get(task_key)
+    DiscoverClass = task_map.get(task_key)
     
     print("\n--- Initializing and running DISCOVER ---")
-    sisso = SissoClass(**config)
+    discover = DiscoverClass(**config)
     
     try:
-        sisso.fit(X, y)
+        discover.fit(X, y)
     except (ImportError, ValueError, RuntimeError) as e:
-        print(f"\nFATAL ERROR during SISSO fit: {e}")
+        print(f"\nFATAL ERROR during DISCOVER fit: {e}")
         return
 
     # --- 6. Save Additional, Plot-Friendly Results ---
@@ -119,7 +119,7 @@ def run_analysis(config_path):
 
     # --- A. Save Top SIS Candidates ---
     sis_candidates_data = []
-    feature_space_df = sisso.feature_space_df_
+    feature_space_df = discover.feature_space_df_
     
     print(f"  Evaluating top {min(20, feature_space_df.shape[1])} features from final feature space...")
     correlations = feature_space_df.corrwith(y).abs().sort_values(ascending=False)
@@ -136,7 +136,7 @@ def run_analysis(config_path):
             r2 = r2_score(y, y_pred)
             rmse = np.sqrt(mean_squared_error(y, y_pred))
             
-            sym_expr = sisso.feature_space_sym_map_.get(feat_name)
+            sym_expr = discover.feature_space_sym_map_.get(feat_name)
             formula = feat_name
             if sym_expr:
                 full_formula_str = print_descriptor_formula(
@@ -144,7 +144,7 @@ def run_analysis(config_path):
                     None,
                     'regression', 
                     True,
-                    clean_to_original_map=sisso.sym_clean_to_original_map_
+                    clean_to_original_map=discover.sym_clean_to_original_map_
                 )
                 formula = full_formula_str.split("=")[-1].strip()
 
@@ -162,11 +162,11 @@ def run_analysis(config_path):
     sis_df.to_csv(sis_candidates_path, index=False, float_format="%.5f")
     print(f"  Saved top SIS candidates to '{sis_candidates_path}'")
 
-    # --- B. Save Final SISSO Models Summary ---
+    # --- B. Save Final DISCOVER Models Summary ---
     models_summary = []
     fix_intercept = config.get('fix_intercept', False)
     
-    for D, model_data in sisso.models_by_dim_.items():
+    for D, model_data in discover.models_by_dim_.items():
         is_plottable = (model_data.get('coef') is not None) and (not model_data.get('is_parametric', False))
         
         coef_list = None
@@ -176,8 +176,8 @@ def run_analysis(config_path):
         sym_features_srepr = [sympy.srepr(sf) for sf in model_data.get('sym_features', [])]
 
         model_info = {
-            'Dimension': D, 'is_best': D == sisso.best_D_,
-            'Score_Train': model_data['score'], 'Score_CV': sisso.cv_results_.get(D, (None, None))[0],
+            'Dimension': D, 'is_best': D == discover.best_D_,
+            'Score_Train': model_data['score'], 'Score_CV': discover.cv_results_.get(D, (None, None))[0],
             'is_plottable': is_plottable, 'fix_intercept': fix_intercept,
             'features': model_data.get('features', []),
             'coefficients': coef_list,
@@ -192,7 +192,7 @@ def run_analysis(config_path):
     print(f"  Saved final DISCOVER models summary to '{models_summary_path}'")
 
     # --- C. Save Symbol Map ---
-    clean_map_str = {str(k): str(v) for k, v in sisso.sym_clean_to_original_map_.items()}
+    clean_map_str = {str(k): str(v) for k, v in discover.sym_clean_to_original_map_.items()}
     symbol_map_path = workdir / "symbol_map.json"
     with open(symbol_map_path, 'w') as f:
         json.dump(clean_map_str, f, indent=2)
@@ -200,7 +200,7 @@ def run_analysis(config_path):
 
     # --- 7. Print Final Standard Summary ---
     print("\n" + "="*25 + " FINAL MODEL REPORT " + "="*25)
-    print(sisso.summary_report(X, y, sample_weight=None))
+    print(discover.summary_report(X, y, sample_weight=None))
     print("\n" + "="*70)
     print(f"\nAnalysis complete. All results are saved in '{workdir}'.")
 
