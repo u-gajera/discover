@@ -1,10 +1,10 @@
 
 # DISCOVER: A Python Implementation of Data-Informed Symbolic Combination of Operators for Variable Equation Regression
 
-<table>
+<table border="0">
 <tr>
-<td width="150" valign="top">
-  <img src="src/discover_logo_1.png" alt="Logo" width="150"/>
+<td width="200" valign="top">
+  <img src="src/discover_logo_1.png" alt="Logo" width="200"/>
 </td>
 <td valign="top">
 
