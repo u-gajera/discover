@@ -1,6 +1,8 @@
 
 # DISCOVER: A Python Implementation of Data-Informed Symbolic Combination of Operators for Variable Equation Regression
 
+![Logo](src/discover_logo_1.png)
+
 **DISCOVER** is a modern, Python-native implementation of the Data-Informed Symbolic Combination of Operators for Variable Equation Regression (DISCOVER) method, a powerful machine learning framework for discovering predictive, interpretable models and descriptors from large feature spaces. This implementation is designed for ease of use, extensibility, and performance, incorporating modern best practices and algorithmic enhancements.
 
 This tool is ideal for researchers and data scientists in materials science, chemistry, and other scientific domains who need to find physically meaningful relationships in their data.
