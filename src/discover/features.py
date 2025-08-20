@@ -22,6 +22,9 @@ import warnings
 from joblib import Memory
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
+from .constants import ALL_CLASSIFICATION_TASKS, REGRESSION
+
 
 # Optional CuPy and Torch acceleration -----------------------------------------------------------
 try:
@@ -69,6 +72,11 @@ def _safe_min_max(arr, xp=np):
         amax = float(xp.max(arr))
         amin = float(xp.min(arr))
     return amin, amax
+
+def _calculate_complexity(expr):
+    """Calculate the complexity of a SymPy expression by counting operations."""
+    return 1 + sympy.count_ops(expr)
+
 
 #  Operator Definitions
 PARAMETRIC_OP_DEFS = {
@@ -450,7 +458,7 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
                                   sis_score_degeneracy_epsilon,
                                   n_jobs, use_cache, workdir, op_rules, parametric_ops,
                                   min_abs_feat_val, max_abs_feat_val, interaction_only,
-                                  task_type, multitask_sis_method,
+                                  task_type, sis_method, multitask_sis_method,
                                   unary_rungs=1, xp=np, dtype=np.float64, 
                                   torch_device=None):
     """Breadth-first SIS-driven feature generator (feature-space only)."""
@@ -579,27 +587,68 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
             break
 
         # --- SIS screening -------------------------------------------------------------------------------------
-        print(f"  Screening and pruning {len(candidate_features_map)} candidates...")
-
         is_gpu_run = xp != np
         candidate_names = [str(_canonicalize_expr(f.sym_expr)) for f in candidate_features_map.values()]
         candidate_sym_map = {name: f.sym_expr for name, f in zip(candidate_names, candidate_features_map.values())}
 
-        if is_gpu_run:
-            # Stack all feature tensors into one big tensor on the GPU
-            feature_tensors = [feat.values.reshape(-1, 1) for feat in candidate_features_map.values()]
-            phi_tensor = xp.hstack(feature_tensors) if xp == cp else torch.cat(feature_tensors, dim=1)
+        if sis_method == 'decision_tree':
+            print(f"  Screening and pruning {len(candidate_features_map)} candidates using Decision Tree (Bayesian Apriori)...")
+            if is_gpu_run:
+                warnings.warn("Decision Tree SIS is CPU-only. Data will be moved from GPU to CPU for this step.")
 
-            sorted_scores_series = run_SIS(
-                phi=None, y=y, task_type=task_type, xp=xp, multitask_sis_method=multitask_sis_method,
-                phi_tensor=phi_tensor, phi_names=candidate_names
-            )
-        else: # Original CPU path
-            temp_values_dict = {name: feat.values for name, feat in zip(candidate_names, 
-                                                    candidate_features_map.values())}
+            # 1. Get numerical data on CPU
+            temp_values_dict = {
+                name: (cp.asnumpy(feat.values) if isinstance(feat.values, cp.ndarray)
+                       else feat.values.cpu().numpy() if isinstance(feat.values, torch.Tensor)
+                       else feat.values)
+                for name, feat in zip(candidate_names, candidate_features_map.values())
+            }
             temp_phi_df = pd.DataFrame(temp_values_dict, index=X.index)
-            sorted_scores_series = run_SIS(temp_phi_df, y, task_type, xp=xp, 
-                                           multitask_sis_method=multitask_sis_method)
+
+            # 2. Get feature importances (Likelihood)
+            print("    - Training decision tree to get feature importances (likelihood)...")
+            if task_type in ALL_CLASSIFICATION_TASKS:
+                dt = DecisionTreeClassifier(max_depth=5, random_state=42)
+            else: # Regression or Multitask
+                dt = DecisionTreeRegressor(max_depth=5, random_state=42)
+            
+            dt.fit(temp_phi_df, y)
+            importances = pd.Series(dt.feature_importances_, index=temp_phi_df.columns)
+
+            # 3. Calculate complexity (Prior)
+            print("    - Calculating complexity score for each feature (prior)...")
+            complexities = pd.Series({
+                str(_canonicalize_expr(f.sym_expr)): _calculate_complexity(f.sym_expr)
+                for f in candidate_features_map.values()
+            })
+            # Prior is inverse of complexity. Add 1 to avoid division by zero and smooth the effect.
+            priors = 1.0 / (1.0 + complexities)
+
+            # 4. Combine to get final score (Posterior)
+            print("    - Combining importance and complexity for final ranking...")
+            # Align series before multiplying, fill missing with 0
+            aligned_importances, aligned_priors = importances.align(priors, fill_value=0)
+            final_scores = aligned_importances * aligned_priors
+            
+            sorted_scores_series = final_scores.sort_values(ascending=False)
+            sis_score_label = "Hybrid Score"
+
+        else: # Default correlation-based SIS
+            print(f"  Screening and pruning {len(candidate_features_map)} candidates using correlation...")
+            sis_score_label = "SIS Score"
+            if is_gpu_run:
+                feature_tensors = [feat.values.reshape(-1, 1) for feat in candidate_features_map.values()]
+                phi_tensor = xp.hstack(feature_tensors) if xp == cp else torch.cat(feature_tensors, dim=1)
+                sorted_scores_series = run_SIS(
+                    phi=None, y=y, task_type=task_type, xp=xp, multitask_sis_method=multitask_sis_method,
+                    phi_tensor=phi_tensor, phi_names=candidate_names
+                )
+            else:
+                temp_values_dict = {name: feat.values for name, feat in zip(candidate_names, 
+                                                        candidate_features_map.values())}
+                temp_phi_df = pd.DataFrame(temp_values_dict, index=X.index)
+                sorted_scores_series = run_SIS(temp_phi_df, y, task_type, xp=xp, 
+                                               multitask_sis_method=multitask_sis_method)
 
         if not isinstance(sorted_scores_series, pd.Series) or sorted_scores_series.empty:
             print("  SIS screening returned no features. Stopping."); break
@@ -621,7 +670,9 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
             rmse = np.nan
             r2 = np.nan
             try:
-                if is_gpu_run:
+                # <--- MODIFIED CODE START
+                if 'phi_tensor' in locals() and is_gpu_run and sis_method == 'correlation':
+                # <--- MODIFIED CODE END
                     feat_idx = candidate_names.index(feat_name)
                     # Get feature values, move to CPU for sklearn
                     if xp == cp:
@@ -637,21 +688,21 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
                 rmse = np.sqrt(mean_squared_error(y_np, y_pred))
                 r2 = r2_score(y_np, y_pred)
             except Exception:
-                pass # Leave RMSE and R2 as NaN if it fails
+                pass
 
             top_features_data.append((i + 1, sis_score, rmse, r2, formula))
 
         if top_features_data:
             max_formula_len = max(len(f) for _, _, _, _, f in top_features_data)
             # Header
-            rank_w, sis_w, rmse_w, r2_w = 5, 11, 11, 11
-            header = f"    {'Rank':<{rank_w}} | {'SIS Score':<{sis_w}} | {'RMSE':<{rmse_w}} | {'R2 Score':<{r2_w}} | Formula"
+            rank_w, sis_w, rmse_w, r2_w = 5, 12, 11, 11
+            header = f"    {'Rank':<{rank_w}} | {sis_score_label:<{sis_w}} | {'RMSE':<{rmse_w}} | {'R2 Score':<{r2_w}} | Formula"
             separator = f"    {'-'*rank_w}-+-{'-'*sis_w}-+-{'-'*rmse_w}-+-{'-'*r2_w}-+-{'-'*max(7, max_formula_len)}"
             print(header)
             print(separator)
             # Rows
             for rank, sis_score, rmse, r2, formula in top_features_data:
-                print(f"    {rank:<{rank_w}} | {sis_score:<{sis_w}.4f} | {rmse:<{rmse_w}.4f} | {r2:<{r2_w}.4f} | {formula}")
+                print(f"    {rank:<{rank_w}} | {sis_score:<{sis_w}.4g} | {rmse:<{rmse_w}.4f} | {r2:<{r2_w}.4f} | {formula}")
 
 
         # keep top-k + degeneracy ------------------------------------------------------------------------------
@@ -668,7 +719,9 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
         # Within top-k, remove near-numerical duplicates (On GPU if possible) --------------------------------
         if len(top_k_names) > 1:
             print(f"    Filtering {len(top_k_names)} top-scoring features to remove redundancies.")
-            if is_gpu_run:
+            # <--- MODIFIED CODE START
+            if is_gpu_run and sis_method == 'correlation':
+            # <--- MODIFIED CODE END
                 # to avoid a costly GPU->CPU transfer of the correlation matrix.
                 top_k_indices = [candidate_names.index(n) for n in top_k_names]
                 top_k_tensor = phi_tensor[:, top_k_indices]

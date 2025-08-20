@@ -73,18 +73,39 @@
   "max_D":                   3,
   
   "//": "A list of subspace sizes for Sure Independence Screening (SIS). (Legacy key: 'n_sis_select' or 'top_k')",
-  "//": "Running multiple sizes provides robustness. The code will attempt a run for each size in the list.",
-  "sis_sizes":               [100, 50],
+  "//": "This is the number of features to keep after each depth of feature generation.",
+  "sis_sizes":               [100],
+
+  "//": "The method for screening/ranking features at each depth of generation.",
+  "//": "Choices: 'correlation' (fast, default), 'decision_tree' (slower, potentially smarter).",
+  "sis_method":              "correlation",
 
   "//": "The core search algorithm.",
-  "//": "Choices: 'greedy', 'sisso++', 'omp', 'miqp', 'brute_force'.",
-  "search_strategy":         "omp",
+  "//": "Choices: 'greedy', 'sisso++', 'omp', 'miqp', 'brute_force', 'rmhc', 'sa'.",
+  "search_strategy":         "sa",
   
   "//": "Prunes highly correlated features before search to improve stability.",
   "max_feat_cross_correlation": 0.95,
 
+  "//": "--- RMHC-Specific Parameters ---",
+  "//": "For 'rmhc' only. Number of random mutations to try at each dimension.",
+  "rmhc_iterations":         200,
+  "//": "For 'rmhc' only. Number of times to restart the search to avoid local optima.",
+  "rmhc_restarts":           5,
+
+  "//": "--- Simulated Annealing (SA)-Specific Parameters ---",
+  "//": "Initial temperature. A higher value allows more exploration.",
+  "sa_initial_temp":         1.0,
+  "//": "Final temperature at which the search stops.",
+  "sa_final_temp":           1e-4,
+  "//": "Geometric cooling rate (e.g., 0.995). Closer to 1 means slower cooling.",
+  "sa_cooling_rate":         0.99,
+  "//": "Acceptance rule for worse solutions. 'metropolis' or 'glauber'.",
+  "sa_iterations":           5000,
+  "sa_acceptance_rule":      "metropolis",
+
+  "//": "--- SISSO++-Specific Parameter ---",
   "//": "For 'sisso++' only. Factor to shrink the search beam at each dimension (e.g., 0.8).",
-  "//": "Value of 1.0 (default) keeps the beam size constant. < 1.0 speeds up search for higher D.",
   "beam_width_decay":        1.0,
 
   "//": "Max iterations for non-linear refinement if 'parametric_ops' are used.",
@@ -97,12 +118,12 @@
   
   "//": "The machine learning task. (Legacy key: 'calc_type')",
   "//": "Choices: 'regression', 'multitask', 'classification_svm', 'classification_logreg', 'ch_classification'.",
-  "task_type":               "multitask",
+  "task_type":               "regression",
 
   "//": "--- Multi-Task-Specific Parameter ---",
-  "//": "This parameter is ONLY used if 'task_type' is 'multitask'.",
+  "//": "This parameter is ONLY used if 'task_type' is 'multitask' and 'sis_method' is 'correlation'.",
   "//": "Choices: 'average' (default) or 'cca' (advanced).",
-  "multitask_sis_method":    "cca", 
+  "multitask_sis_method":    "average", 
   
   "//": "For regression: the loss function. 'l2' (Ridge) or 'huber' (robust to outliers).",
   "loss":                    "l2",
@@ -117,10 +138,10 @@
   "C_logreg":                1.0,
   
   "//": "Method to select the best dimension D: 'cv' (Cross-Validation) or 'bootstrap' or 'aic' or 'bic'.",
-  "selection_method":        "bic",
+  "selection_method":        "cv",
   
   "//": "Number of folds for K-Fold CV. Use -1 for Leave-One-Out CV (LOOCV).",
-  "cv":                      -1,
+  "cv":                      10,
   
   "//": "Number of bootstrap samples if selection_method is 'bootstrap'.",
   "n_bootstrap":             50,

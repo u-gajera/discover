@@ -49,7 +49,9 @@ from .search import (
     _find_best_models_ch_greedy,
     _refine_model_with_nlopt,
     _find_best_models_omp,
-    _find_best_models_miqp
+    _find_best_models_miqp,
+    _find_best_models_rmhc,
+    _find_best_models_sa 
 )
 
 from .utils import save_results, print_descriptor_formula
@@ -154,22 +156,38 @@ class DiscoverBase(BaseEstimator):
         self.max_abs_feat_val = config.get('max_abs_feat_val', 1e+50)
         
         self.search_strategy = config.get('search_strategy', 'greedy').lower()
-        if self.search_strategy not in ['greedy', 'brute_force', 'sisso++', 'omp', 'miqp']:
-            raise ValueError(f"search_strategy must be one of 'greedy', 'brute_force', 'sisso++', 'omp', 'miqp'. Got '{self.search_strategy}'")
+        valid_searches = ['greedy', 'brute_force', 'sisso++', 'omp', 'miqp', 'rmhc', 'sa']
+        if self.search_strategy not in valid_searches:
+            raise ValueError(f"search_strategy must be one of {', '.join(valid_searches)}. Got '{self.search_strategy}'")
         
+        self.sis_method = config.get('sis_method', 'correlation').lower()
+        if self.sis_method not in ['correlation', 'decision_tree']:
+            raise ValueError(f"sis_method must be 'correlation' or 'decision_tree'. Got '{self.sis_method}'")
+
         self.multitask_sis_method = config.get('multitask_sis_method', 'average').lower()
         if self.multitask_sis_method not in ['average', 'cca']:
             raise ValueError("`multitask_sis_method` must be 'average' or 'cca'.")
         self.nlopt_max_iter = config.get('nlopt_max_iter', 100)
         self.beam_width_decay = config.get('beam_width_decay', 1.0)
         self.max_D = config.get('max_D', 3)
-        # The 'restarts' with different SIS sizes is removed in favor of the correct iterative methodology.
+
         self.sis_sizes = config.get('sis_sizes', [sis_select] if sis_select else [100])
         if not isinstance(self.sis_sizes, list): self.sis_sizes = [self.sis_sizes]
         self.n_features_per_sis_iter = self.sis_sizes[0]
         if len(self.sis_sizes) > 1:
             warnings.warn(f"Multiple `sis_sizes` provided. In the iterative SISSO framework, only the first value ({self.n_features_per_sis_iter}) will be used for pruning at each depth.")
 
+        self.rmhc_iterations = config.get('rmhc_iterations', 200)
+        self.rmhc_restarts = config.get('rmhc_restarts', 5)
+        
+        self.sa_initial_temp = config.get('sa_initial_temp', 1.0)
+        self.sa_final_temp = config.get('sa_final_temp', 1e-4)
+        self.sa_cooling_rate = config.get('sa_cooling_rate', 0.99)
+        self.sa_acceptance_rule = config.get('sa_acceptance_rule', 'metropolis').lower()
+        if self.sa_acceptance_rule not in ['metropolis', 'glauber']:
+            raise ValueError("sa_acceptance_rule must be 'metropolis' or 'glauber'.")
+        
+        self.sa_iterations = config.get('sa_iterations', 2000)
         self.max_feat_cross_correlation = config.get('max_feat_cross_correlation', 0.95)
         self.loss = config.get('loss', 'l2')
         self.fix_intercept_ = config.get('fix_intercept', False)
@@ -207,9 +225,14 @@ class DiscoverBase(BaseEstimator):
             'unary_rungs': self.unary_rungs,
             'min_abs_feat_val': self.min_abs_feat_val, 'max_abs_feat_val': self.max_abs_feat_val,
             'search_strategy': self.search_strategy, 
+            'sis_method': self.sis_method,
             'multitask_sis_method': self.multitask_sis_method,
             'nlopt_max_iter': self.nlopt_max_iter,
             'beam_width_decay': self.beam_width_decay, 'max_D': self.max_D, 'sis_sizes': self.sis_sizes,
+            'rmhc_iterations': self.rmhc_iterations, 'rmhc_restarts': self.rmhc_restarts,
+            'sa_initial_temp': self.sa_initial_temp, 'sa_final_temp': self.sa_final_temp, 
+            'sa_cooling_rate': self.sa_cooling_rate, 'sa_acceptance_rule': self.sa_acceptance_rule,
+            'sa_iterations': self.sa_iterations,  
             'max_feat_cross_correlation': self.max_feat_cross_correlation, 'loss': self.loss,
             'fix_intercept_': self.fix_intercept_, 'alpha': self.alpha, 'C_svm': self.C_svm,
             'C_logreg': self.C_logreg, 'selection_method': self.selection_method,
@@ -346,7 +369,6 @@ class DiscoverBase(BaseEstimator):
 
         X_df, y_s = self._setup_task(X, y)
         
-        # `sis_sizes` is removed as it's superseded by the iterative methodology.
         print(f"\n{'='*25}\n--- STARTING ITERATIVE FEATURE GENERATION & SCREENING ---\n{'='*25}")
         t_start_feat_gen = time.time()
         
@@ -362,6 +384,7 @@ class DiscoverBase(BaseEstimator):
             max_abs_feat_val=self.max_abs_feat_val,
             interaction_only=self.interaction_only,
             task_type=self.task_type_,
+            sis_method=self.sis_method,
             multitask_sis_method=self.multitask_sis_method,
             unary_rungs=self.unary_rungs,
             xp=self.xp_, dtype=np.dtype(self.dtype), torch_device=self.torch_device_
@@ -374,7 +397,6 @@ class DiscoverBase(BaseEstimator):
             raise RuntimeError("Iterative feature generation resulted in an empty space.")
         self.feature_space_df_ = self.feature_space_df_.astype(self.dtype)
 
-        # The rest of the `fit` method now proceeds with the high-quality feature space
         t_start_search = time.time()
 
         search_args = {"sisso_instance": self, "phi_sis_df": self.feature_space_df_, "y": y_s, "D_max": self.max_D,
@@ -382,7 +404,6 @@ class DiscoverBase(BaseEstimator):
                        "sample_weight": sample_weight, "device": self.device, "torch_device": self.torch_device_,
                        "X_df": X_df}
         
-        # Dispatch logic for search strategies remains the same
         if self.task_type_ == CH_CLASSIFICATION:
             warnings.warn("Task is 'ch_classification'. Overriding search_strategy with specialized 'geometric_greedy' search.")
             search_results = _find_best_models_ch_greedy(**search_args)
@@ -399,6 +420,12 @@ class DiscoverBase(BaseEstimator):
         elif self.search_strategy == 'miqp':
             search_results = _find_best_models_miqp(**search_args)
             self.timing_summary_['MIQP Search'] = time.time() - t_start_search
+        elif self.search_strategy == 'rmhc':
+            search_results = _find_best_models_rmhc(**search_args)
+            self.timing_summary_['RMHC Search'] = time.time() - t_start_search
+        elif self.search_strategy == 'sa': # 
+            search_results = _find_best_models_sa(**search_args)
+            self.timing_summary_['SA Search'] = time.time() - t_start_search
         else: # 'greedy' is the default
             search_results = _find_best_models_greedy(**search_args)
             self.timing_summary_['Greedy Search'] = time.time() - t_start_search
@@ -423,17 +450,16 @@ class DiscoverBase(BaseEstimator):
         self.cv_results_ = {}
         n_samples = len(X_df)
         
-        # Model selection logic remains the same
         if self.selection_method in ['cv', 'bootstrap']:
             cv_splitter = None
             if self.selection_method == 'bootstrap':
                 print(f"\n--- Evaluating Dimensions using {self.n_bootstrap} Bootstrap OOB Samples ---")
                 cv_splitter = _BootstrapOutOfBagSplitter(n_splits=self.n_bootstrap, random_state=self.random_state)
-            elif self.cv is not None and self.cv > 1:
+            elif self.cv is not None:
                 if self.cv == -1 or self.cv >= n_samples:
                     print("\n--- Evaluating Dimensions using Leave-One-Out CV (LOOCV) ---")
                     cv_splitter = LeaveOneOut()
-                else:
+                elif self.cv > 1:
                     print(f"\n--- Evaluating Dimensions using {self.cv}-Fold CV ---")
                     if self.task_type_ in ALL_CLASSIFICATION_TASKS:
                         min_class_count = pd.Series(y_s).value_counts().min()
@@ -732,7 +758,7 @@ class DiscoverBase(BaseEstimator):
         elif self.selection_method == 'bootstrap':
             selection_str = f"{self.n_bootstrap} Bootstraps (OOB)"
         
-        search_strat_str = self.search_strategy.capitalize()
+        search_strat_str = self.search_strategy.upper().replace("SISSO++", "SISSO++")
         if self.task_type_ == CH_CLASSIFICATION:
             search_strat_str = "Geometric Greedy"
 
