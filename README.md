@@ -1,4 +1,5 @@
 
+
 # DISCOVER: A Python Implementation of Data-Informed Symbolic Combination of Operators for Variable Equation Regression
 
 <img src="src/discover_logo_1.png" alt="Logo" width="220" align="left" style="margin-right: 20px;"/>
@@ -100,7 +101,6 @@ Here is a minimal example:
   "selection_method": "cv",
   "cv": 5
 }
-````
 
 ### Step 3: Run the Analysis
 

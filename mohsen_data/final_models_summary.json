@@ -1,0 +1,68 @@
+[
+  {
+    "Dimension": 1,
+    "is_best": false,
+    "Score_Train": 0.27936953075209425,
+    "Score_CV": 0.26465207838168847,
+    "is_plottable": true,
+    "fix_intercept": false,
+    "features": [
+      "Abs(f18)"
+    ],
+    "coefficients": [
+      0.19187829522348232,
+      1.0064468843827092
+    ],
+    "sym_features": [
+      "Abs(Symbol('f18', real=True))"
+    ],
+    "Model_Type": "Linear"
+  },
+  {
+    "Dimension": 2,
+    "is_best": true,
+    "Score_Train": 0.2666203096835479,
+    "Score_CV": 0.2515704012073848,
+    "is_plottable": true,
+    "fix_intercept": false,
+    "features": [
+      "Abs(f18)",
+      "f2*(f20 - Abs(f18))/f0"
+    ],
+    "coefficients": [
+      0.0077922625598280115,
+      0.8966992431910654,
+      -0.09992218685011171
+    ],
+    "sym_features": [
+      "Abs(Symbol('f18', real=True))",
+      "Mul(Pow(Symbol('f0', real=True), Integer(-1)), Symbol('f2', real=True), Add(Symbol('f20', real=True), Mul(Integer(-1), Abs(Symbol('f18', real=True)))))"
+    ],
+    "Model_Type": "Linear"
+  },
+  {
+    "Dimension": 3,
+    "is_best": false,
+    "Score_Train": 0.26552606592503086,
+    "Score_CV": 0.25102577478720245,
+    "is_plottable": true,
+    "fix_intercept": false,
+    "features": [
+      "Abs(f18)",
+      "f2*(f20 - Abs(f18))/f0",
+      "f1*f18**2/f2"
+    ],
+    "coefficients": [
+      0.017303295256460238,
+      0.8553548934433876,
+      -0.10389792633924785,
+      0.004625823733396448
+    ],
+    "sym_features": [
+      "Abs(Symbol('f18', real=True))",
+      "Mul(Pow(Symbol('f0', real=True), Integer(-1)), Symbol('f2', real=True), Add(Symbol('f20', real=True), Mul(Integer(-1), Abs(Symbol('f18', real=True)))))",
+      "Mul(Symbol('f1', real=True), Pow(Symbol('f18', real=True), Integer(2)), Pow(Symbol('f2', real=True), Integer(-1)))"
+    ],
+    "Model_Type": "Linear"
+  }
+]

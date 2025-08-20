@@ -1,0 +1,30 @@
+pySISSO Summary
+=================
+TASK_TYPE: regression
+MODEL_SELECTION_METHOD: 5-Fold CV
+SELECTED_DIMENSION: 2
+SEARCH_STRATEGY: Omp
+PARAMETRIC_MODEL_FOUND: NO
+FEATURE_DEPTH: 2
+N_SAMPLES: 710
+N_PRIMARY_FEATURES: 22
+N_TOTAL_FEATURES: 50
+
+******* BEST MODEL (D=2) *******
+Score RMSE (5-Fold CV): 0.25157 +/- 0.093458
+R2/Accuracy on full data: 0.9695
+
+============================================================
+Final Symbolic Model: regression
+============================================================
+P =                                                   0.0999221868501117⋅E_oct⋅(Eₘₑₜₐₗ - │Eₛᵢₜₑ│)
+0.896699243191065⋅│Eₛᵢₜₑ│ + 0.00779226255982801 - ───────────────────────────────────────────
+                                                                       E                     
+
+--- Model Diagnostics ---
+Variance Inflation Factors (VIF):
+  - Abs(f18)                                  : 4.8473
+  - f2*(f20 - Abs(f18))/f0                    : 4.8473
+
+Orthogonalized Model Formula (y = c0 + c1*D'1 + ...):
+  y = +0.0078 -47.7757 * (D'_1) -4.8551 * (D'_2)
