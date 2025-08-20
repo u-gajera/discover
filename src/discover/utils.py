@@ -475,7 +475,6 @@ def print_descriptor_formula(descriptor_features, coefficients, task_type, fix_i
             return "\n".join([f"# D{i+1}: {sympy_to_s_expression(feat)}" for i, feat in enumerate(temp_descriptor_features)])
         
         if coefficients is None:
-            # CORRECTED: Handle case of just printing features
             formulas = [sympy_to_s_expression(feat) for feat in temp_descriptor_features]
             return "\n".join(formulas)
         
@@ -486,10 +485,10 @@ def print_descriptor_formula(descriptor_features, coefficients, task_type, fix_i
             formula = 0
             coef_offset = 0
             if not fix_intercept:
-                formula += sympy.Number(coefs_t[0])
+                formula += sympy.Number(float(coefs_t[0]))
                 coef_offset = 1
             if temp_descriptor_features:
-                formula += sum(sympy.Number(coefs_t[coef_offset + i]) * f for i, f in enumerate(temp_descriptor_features))
+                formula += sum(sympy.Number(float(coefs_t[coef_offset + i])) * f for i, f in enumerate(temp_descriptor_features))
             formulas.append(sympy_to_s_expression(formula))
         return "\n".join(formulas)
     else: # Default: verbose pretty print
@@ -508,16 +507,11 @@ def print_descriptor_formula(descriptor_features, coefficients, task_type, fix_i
              desc_strs.append(f"D{i+1} = {formatter(f)}")
         output.append("Descriptors define the classification space:\n" + "\n".join(desc_strs))
     else:
-        # ** THIS IS THE CORRECTED BLOCK **
         if coefficients is None:
-            # Handle the case where we only want to print the feature formula, not a full model.
-            # This is used for the top_sis_candidates.csv file.
             if len(temp_descriptor_features) == 1:
                 formula_str = formatter(temp_descriptor_features[0])
-                # For latex, we don't need the target name
                 if latex_format:
                      return formula_str
-                # For other formats, wrap it nicely
                 output.append(f"{target_name} = {formula_str}")
             else:
                  output.append("Model features:\n" + "\n".join(f"D{i+1} = {formatter(f)}" for i,f in enumerate(temp_descriptor_features)))
@@ -532,11 +526,12 @@ def print_descriptor_formula(descriptor_features, coefficients, task_type, fix_i
             coefs_t = coefficients[t_idx] if num_tasks > 1 else coefficients.flatten()
             coef_offset = 0
             if not fix_intercept:
-                full_model_expr += sympy.Number(coefs_t[0])
+                full_model_expr += sympy.Number(float(coefs_t[0]))
                 coef_offset = 1
             
             for i, feature in enumerate(temp_descriptor_features):
-                full_model_expr += sympy.Number(coefs_t[i + coef_offset]) * feature
+                full_model_expr += sympy.Number(float(coefs_t[i + coef_offset])) * feature
+
             
             # Round the coefficients for cleaner output
             if pretty_format or latex_format:

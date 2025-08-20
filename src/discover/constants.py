@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-This module defines global constants used across the pySISSO package to ensure
+This module defines global constants used across the DISCOVER package to ensure
 consistency and avoid magic strings.
-Global literals and hyper-parameter defaults used throughout pySISSO.
+Global literals and hyper-parameter defaults used throughout DISCOVER.
 
 Keeping them in one place avoids “magic numbers” in the core logic.
 
