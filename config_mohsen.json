@@ -1,7 +1,7 @@
 {
-  "//": "==========================================================================",
-  "//": "      CONFIGURATION FOR THE PROVIDED MATERIALS SCIENCE DATASET (train.xlsx) ",
-  "//": "============================================================================",
+  "//": "====================================================================",
+  "//": "      CONFIGURATION FOR THE PROVIDED MATERIALS SCIENCE DATASET  ",
+  "//": "====================================================================",
 
   "//": "===================================================================",
   "//": "                       1. DATA & I/O SETTINGS                        ",
@@ -12,7 +12,7 @@
   "non_feature_cols": [
     "materials"
   ],
-  "workdir":                 "mohsen_data",
+  "workdir":                 "discover_output",
   "save_feature_space":      true,
   "use_cache":               true,
 
@@ -23,7 +23,9 @@
   "depth":                   2,
   "op_rules": [
     {"op": "add"}, {"op": "sub"}, {"op": "mul"}, {"op": "div"},
-    {"op": "inv"}, {"op": "abs"}, {"op": "sq"}, {"op": "sqrt"}
+    {"op": "inv"}, {"op": "abs"}, {"op": "sq"}, {"op": "cb"}, 
+    {"op": "sqrt"}, {"op": "cbrt"}, {"op": "log"}, {"op": "exp"},
+    {"op": "abs_diff"}, {"op": "harmonic_mean"}
   ],
   "parametric_ops":          [],
   "interaction_only":        false,
@@ -58,9 +60,9 @@
   "//": "                   3. SEARCH & SELECTION STRATEGY                    ",
   "//": "===================================================================",
   
-  "max_D":                   3,
-  "sis_sizes":               [50],
-  "search_strategy":         "omp",
+  "max_D":                   2,
+  "sis_sizes":               [200],
+  "search_strategy":         "greedy",
   "max_feat_cross_correlation": 0.95,
 
   "//": "===================================================================",
@@ -77,5 +79,6 @@
   "//": "===================================================================",
 
   "n_jobs":                  -1,
+  "device":                  "mps", 
   "random_state":            42
 }

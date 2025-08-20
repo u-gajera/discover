@@ -31,39 +31,52 @@ from .constants import (
     CLASSIFICATION_LOGREG, ALL_CLASSIFICATION_TASKS
 )
 from .features import CUPY_AVAILABLE, TORCH_AVAILABLE
-
-# Optional GPU imports
 try:
     import cupy as cp
 except ImportError:
-    cp = None
+    class cp_dummy:
+        ndarray = type(None)
+        def asnumpy(self, x): return np.asarray(x)
+    cp = cp_dummy()
 
 try:
     import torch
 except ImportError:
-    torch = None
+    class torch_dummy:
+        Tensor = type(None)
+    torch = torch_dummy()
 
 #  Screening and Scoring
 
-def run_SIS(phi_df, y, task_type, xp=np, multitask_sis_method='average'):
+def run_SIS(phi, y, task_type, xp=np, multitask_sis_method='average', phi_tensor=None, phi_names=None):
     """
     Performs Sure Independence Screening (SIS) to rank features.
     For multi-task problems, can use simple 'average' correlation or 'cca'.
+    For GPU paths, it expects a pre-loaded `phi_tensor` and a list of `phi_names`.
+    For CPU paths, it expects a pandas `phi` DataFrame.
 
     as values, sorted in descending order of importance.
     """
-    print(f"Running SIS to screen {phi_df.shape[1]} features...")
-    if phi_df.empty:
-        return pd.Series([], dtype=float) 
+    phi_df = phi
+    is_gpu_run = task_type == REGRESSION and xp != np and (xp == cp or xp == torch) and phi_tensor is not None
 
-    # GPU-accelerated path for regression
-    if task_type == REGRESSION and xp != np and (xp == cp or xp == torch):
-        print("  Using GPU-accelerated SIS for regression.")
+    if is_gpu_run:
+        print(f"Running SIS to screen {phi_tensor.shape[1]} features on GPU...")
         try:
-            n_samples = phi_df.shape[0]
-            phi_gpu = xp.asarray(phi_df.values, dtype=xp.float64)
-            y_gpu = xp.asarray(y, dtype=xp.float64)
+            phi_gpu = phi_tensor
 
+            y_np = y.to_numpy() if isinstance(y, pd.Series) else np.asarray(y)
+
+            if xp == torch:
+                # For PyTorch, get the dtype from the tensor and convert numpy array directly
+                y_gpu = torch.from_numpy(y_np).to(device=phi_gpu.device, dtype=phi_gpu.dtype)
+            else: # cupy
+                # For CuPy, we can use the .name attribute as before
+                y_gpu = cp.asarray(y_np, dtype=phi_gpu.dtype.name)
+
+            if y_gpu.ndim > 1: y_gpu = y_gpu.squeeze()
+
+            n_samples = phi_gpu.shape[0]
             phi_c = phi_gpu - xp.mean(phi_gpu, axis=0)
             y_c = y_gpu - xp.mean(y_gpu)
 
@@ -72,10 +85,10 @@ def run_SIS(phi_df, y, task_type, xp=np, multitask_sis_method='average'):
             y_std = xp.std(y_c, **std_args)
 
             cov_vec = (phi_c.T @ y_c) / (n_samples - 1)
-
             correlations_gpu = xp.zeros_like(phi_std)
-            valid_std_mask = phi_std > 1e-9
-            if y_std > 1e-9 and xp.any(valid_std_mask):
+            valid_std_mask = (phi_std > 1e-9) & (y_std > 1e-9)
+
+            if xp.any(valid_std_mask):
                  correlations_gpu[valid_std_mask] = cov_vec[valid_std_mask] / (phi_std[valid_std_mask] * y_std)
 
             if CUPY_AVAILABLE and xp == cp:
@@ -85,44 +98,49 @@ def run_SIS(phi_df, y, task_type, xp=np, multitask_sis_method='average'):
             else:
                 correlations_cpu = np.abs(correlations_gpu)
 
-            correlations = pd.Series(correlations_cpu, index=phi_df.columns)
-            print(f"  GPU SIS screening complete. Top feature: '{correlations.idxmax()}'")
+            correlations = pd.Series(correlations_cpu, index=phi_names)
             return correlations.dropna().sort_values(ascending=False)
         except Exception as e:
             warnings.warn(f"GPU-based SIS failed: {e}. Falling back to CPU-based SIS.")
+            cpu_values = phi_tensor.cpu().numpy() if TORCH_AVAILABLE and isinstance(phi_tensor, torch.Tensor) else cp.asnumpy(phi_tensor)
+            phi_df = pd.DataFrame(cpu_values, columns=phi_names, index=y.index)
 
-    # CPU path (original implementation and fallback)
+    # CPU path (also serves as the fallback path for a failed GPU run)
+    if phi_df is None:
+        warnings.warn("SIS called in CPU mode but `phi` DataFrame is None. Returning empty Series.")
+        return pd.Series([], dtype=float)
+
+    print(f"Running SIS to screen {phi_df.shape[1]} features on CPU...")
+    if phi_df.empty:
+        return pd.Series([], dtype=float)
+
     if task_type == REGRESSION:
         y_s = pd.Series(y, index=phi_df.index)
         correlations = phi_df.corrwith(y_s).abs().dropna().sort_values(ascending=False)
     elif task_type in ALL_CLASSIFICATION_TASKS:
          try:
             non_constant_cols = phi_df.columns[phi_df.var() > 1e-9]
-            if len(non_constant_cols) == 0: return pd.Series([], dtype=float) 
+            if len(non_constant_cols) == 0: return pd.Series([], dtype=float)
             phi_subset = phi_df[non_constant_cols]
             f_values, _ = f_classif(phi_subset, y)
             correlations = pd.Series(f_values, index=phi_subset.columns).fillna(0).sort_values(ascending=False)
          except ValueError as e:
-             warnings.warn(f"SIS f_classif failed: {e}. Returning empty list."); return pd.Series([], dtype=float) 
-    
+             warnings.warn(f"SIS f_classif failed: {e}. Returning empty list."); return pd.Series([], dtype=float)
+
     elif task_type == MULTITASK:
         y_df = y if isinstance(y, pd.DataFrame) else pd.DataFrame(y, index=phi_df.index)
-        
+
         if multitask_sis_method == 'cca':
             print("  Using Canonical Correlation Analysis (CCA) for multi-task screening.")
             cca = CCA(n_components=1)
             cca_corrs = {}
             for feature_name in phi_df.columns:
                 try:
-                    # CCA requires 2D input
-                    X_feat = phi_df[[feature_name]].values 
-                    # Fit CCA and get the correlation of the first canonical variables
+                    X_feat = phi_df[[feature_name]].values
                     X_c, y_c = cca.fit_transform(X_feat, y_df.values)
-                    # The correlation is between the first columns of the transformed sets
                     corr = np.corrcoef(X_c.T, y_c.T)[0, 1]
                     cca_corrs[feature_name] = np.abs(corr)
                 except np.linalg.LinAlgError:
-                    # This can happen if a feature is constant
                     cca_corrs[feature_name] = 0.0
             correlations = pd.Series(cca_corrs).fillna(0).sort_values(ascending=False)
         else: # Default 'average' method
@@ -132,10 +150,6 @@ def run_SIS(phi_df, y, task_type, xp=np, multitask_sis_method='average'):
     else:
         raise ValueError(f"task_type '{task_type}' not recognized.")
 
-    if not correlations.empty:
-        print(f"  CPU SIS screening complete. Top feature: '{correlations.index[0]}'")
-    
-    # Return the full Series
     return correlations
 
 
@@ -176,7 +190,7 @@ class GPUModel:
         elif self.xp == cp and not isinstance(X_new, cp.ndarray):
             dtype = self.coef_.dtype
             X_new = cp.asarray(X_new, dtype=dtype)
-        
+
         pred = X_new @ self.coef_
         if self.fit_intercept_:
             pred += self.intercept_
@@ -208,11 +222,11 @@ def _cuda_ridge_score(X_gpu, y_gpu, alpha, fit_intercept, sample_weight_gpu=None
             intercept = y_mean - X_mean @ coef
         else:
             intercept = 0
-        
+
         model_obj = GPUModel(coef, intercept, 'cuda', cp, fit_intercept)
         y_pred_unweighted = model_obj.predict(X_orig)
         score = cp.sqrt(cp.mean((y_orig - y_pred_unweighted)**2))
-        
+
         if fit_intercept:
             full_coef = cp.hstack([[intercept], coef]).reshape(1, -1)
         else:
@@ -247,16 +261,16 @@ def _mps_ridge_score(X_mps, y_mps, alpha, fit_intercept, sample_weight_mps=None)
             intercept = y_mean - (X_mean @ coef)
         else:
             intercept = torch.tensor(0.0, device=X_mps.device, dtype=X_mps.dtype)
-        
+
         model_obj = GPUModel(coef, intercept, 'mps', torch, fit_intercept)
         y_pred_unweighted = model_obj.predict(X_orig)
         score = torch.sqrt(torch.mean((y_orig - y_pred_unweighted)**2))
-        
+
         if fit_intercept:
             full_coef = torch.cat([intercept.unsqueeze(0), coef]).reshape(1, -1)
         else:
             full_coef = coef.reshape(1, -1)
-        
+
         return score.item(), {'model': model_obj, 'coef': full_coef.cpu().numpy()}
     except torch.linalg.LinAlgError: return float('inf'), None
 
@@ -280,7 +294,7 @@ def multitask_score(X, Y_df, model_params, sample_weight=None):
             intercepts_list.append(model.intercept_)
             models[task_col] = model
         except np.linalg.LinAlgError: return float('inf'), None
-    
+
     if fit_intercept:
         coef = np.hstack([np.array(intercepts_list).reshape(-1, 1), np.vstack(coefs_list)])
     else:
@@ -315,13 +329,13 @@ def ch_overlap_score(X, y, model_params, sample_weight=None, n_mc_points=1500):
            in_hull_counts += is_inside
            total_points_in_any_hull += np.sum(is_inside)
         except ValueError: return float('inf'), None
-    
+
     points_in_overlap = np.sum(in_hull_counts > 1)
     overlap_fraction = points_in_overlap / total_points_in_any_hull if total_points_in_any_hull > 0 else 1.0
-    
+
     for c in classes:
          if len(points_dict[c]) < 2 * min_points_for_hull: overlap_fraction += 0.1
-    
+
     return overlap_fraction, {'model': hulls, 'coef': None}
 
 def classification_score(X, y, task_type, model_params, sample_weight=None):
@@ -396,7 +410,7 @@ def _run_cv(X_features, y, cv_splitter, task_type, model_params, sample_weight):
          X_train, X_val = X_features.iloc[train_idx], X_features.iloc[val_idx]
          y_train = y.iloc[train_idx] if hasattr(y, 'iloc') else y[train_idx]
          y_val = y.iloc[val_idx] if hasattr(y, 'iloc') else y[val_idx]
-         
+
          if sw_series is not None:
              sw_train = sw_series.iloc[train_idx].values if isinstance(sw_series, pd.Series) else sw_series.iloc[train_idx]
              sw_val = sw_series.iloc[val_idx].values if isinstance(sw_series, pd.Series) else sw_series.iloc[val_idx]
@@ -412,7 +426,7 @@ def _run_cv(X_features, y, cv_splitter, task_type, model_params, sample_weight):
             _, model_data = score_func(X_train, y_train, model_params, sw_train)
             if model_data is None:
                 scores.append(float('inf')); continue
-            
+
             val_score = float('inf')
             if task_type == REGRESSION:
                  y_pred = model_data['model'].predict(X_val)
@@ -445,11 +459,11 @@ def _refit_and_score_final_model(indices, X_data, y_true, task_type, model_param
     """
     combo_names = [feature_names[i] for i in indices]
     X_combo_df = pd.DataFrame(X_data[:, indices], columns=combo_names)
-    
+
     score, model_data = _score_single_model(
         X_combo_df, y_true, task_type, model_params, sample_weight, device, torch_device
     )
-    
+
     if model_data:
         return score, model_data.get('model'), model_data.get('coef')
     return float('inf'), None, None

@@ -1,9 +1,14 @@
 
-# pySISSO: A Python Implementation of Sure Independence Screening and Sparsifying Operator
+# DISCOVER: A Python Implementation of Data-Informed Symbolic Combination of Operators for Variable Equation Regression
 
-**pySISSO** is a modern, Python-native implementation of the Sure Independence Screening and Sparsifying Operator (SISSO) method, a powerful machine learning framework for discovering predictive, interpretable models and descriptors from large feature spaces. This implementation is designed for ease of use, extensibility, and performance, incorporating modern best practices and algorithmic enhancements.
+<img src="src/discover_logo_1.png" alt="Logo" width="220" align="left" style="margin-right: 20px;"/>
 
-This tool is ideal for researchers and data scientists in materials science, chemistry, and other scientific domains who need to find physically meaningful relationships in their data.
+**DISCOVER** is a modern, Python-native implementation of the *Data-Informed Symbolic Combination of Operators for Variable Equation Regression* (DISCOVER) method — a powerful machine learning framework for discovering predictive, interpretable models and descriptors from large feature spaces.  
+
+This implementation is designed for **ease of use, extensibility, and performance**, incorporating modern best practices and algorithmic enhancements.  
+
+This tool is ideal for **researchers and data scientists** in materials science, chemistry, and other scientific domains who need to find physically meaningful relationships in their data.
+
 
 ## Features
 
@@ -67,7 +72,7 @@ Ensure your data is in a single **CSV file**. The file should contain all primar
 
 ### Step 2: Edit the Configuration File
 
-Open `config.json`. This file controls every aspect of the SISSO run. For a quick start, you only need to change these key parameters:
+Open `config.json`. This file controls every aspect of the DISCOVER run. For a quick start, you only need to change these key parameters:
 
 * `"data_file"`: Set this to the path of your CSV data file (e.g., `"my_data.csv"`).
 * `"property_key"`: The exact name of the column in your CSV that contains the target property (e.g., `"Target_U (eV)"`).
@@ -82,9 +87,9 @@ Here is a minimal example:
 **`config.json`**
 ```json
 {
-  "data_file": "SISSO_Sample_Dataset.csv",
+  "data_file": "Sample_Dataset.csv",
   "property_key": "Target_U (eV)",
-  "workdir": "sisso_output",
+  "workdir": "discover_output",
   "task_type": "regression",
   "max_D": 3,
   "op_rules": [
@@ -99,10 +104,10 @@ Here is a minimal example:
 
 ### Step 3: Run the Analysis
 
-Execute `run_sisso.py` from your terminal, passing the configuration file as the argument:
+Execute `run_discover.py` from your terminal, passing the configuration file as the argument:
 
 ```bash
-python run_sisso.py config.json
+python run_discover.py config.json
 ```
 
 The script will start, display progress, and save all outputs—including models, plots, and summary reports—into the directory specified by `workdir`. The final, best model will be printed to the console.
@@ -140,26 +145,26 @@ This creates a grid of parity plots, one for the best-found model at each dimens
 python plot_results.py <workdir> <data_file> 
 ```
 
-  * **`<workdir>`**: The output directory from your `run_sisso.py` run.
+  * **`<workdir>`**: The output directory from your `run_discover.py` run.
   * **`<data_file>`**: The original data file used for the run.
   * **`<your_target_name>`**: The name of your target property column.
 
 **Example:**
 
 ```bash
-python plot_results.py sisso_output SISSO_Sample_Dataset.csv "
+python plot_results.py discover_output train.csv "
 ```
 
-This saves `parity_best_allD.png` in the `sisso_output` directory.
+This saves `parity_best_allD.png` in the `discover_output` directory.
 
-**2. Plot a Specific SISSO Model:**
+**2. Plot a Specific DISCOVER Model:**
 Generate a parity plot for a specific model dimension (`-D`).
 
 ```bash
-python plot_results.py <workdir> <data_file>  --mode sisso -D 2
+python plot_results.py <workdir> <data_file>  --mode discover -D 2
 ```
 
-This command will generate a plot for the 2-dimensional model and save it as `parity_sisso_D2.png`.
+This command will generate a plot for the 2-dimensional model and save it as `parity_discover_D2.png`.
 
 **3. Plot Top SIS Candidates:**
 Analyze the performance of the best individual features (1D models) found by Sure Independence Screening.
@@ -174,10 +179,10 @@ This command plots the top 6 features and saves the figure as `parity_sis_top6.p
 
 The project is organized into several modules, each with a specific responsibility:
 
-  * `run_sisso.py`: The main command-line interface to drive the analysis.
+  * `run_discover.py`: The main command-line interface to drive the analysis.
   * `config.json`: The central configuration file for setting up a run.
-  * `pysisso/`: The main package directory.
-      * `models.py`: Contains the primary user-facing `SISSO` classes, which orchestrate the entire workflow.
+  * `discover/`: The main package directory.
+      * `models.py`: Contains the primary user-facing `DISCOVER` classes, which orchestrate the entire workflow.
       * `features.py`: Handles the generation of the feature space from primary features and mathematical operators.
       * `search.py`: Implements the different search strategies (Greedy, SISSO++, OMP, etc.).
       * `scoring.py`: Contains functions for model evaluation, cross-validation, and SIS.

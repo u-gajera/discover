@@ -1,3 +1,4 @@
+
 """
 This module implements the different search strategies for finding the best
 feature combinations (descriptors). It includes:
@@ -19,10 +20,12 @@ Workflow per dimension D:
 Iterates D = 1…max_D, saving JSON summaries after each pass.
 """
 import numpy as np
+import pandas as pd
 import sympy
 import time
 import math
 import warnings
+import random 
 from itertools import combinations
 from scipy.optimize import minimize
 
@@ -72,6 +75,16 @@ except ImportError:
     torch = torch_dummy()
 except:
     pass # Keep going if torch import fails for other reasons
+
+
+def _format_feature_str(sisso_instance, feature_name):
+    """Helper to get a human-readable formula string for a feature name."""
+    sym_expr = sisso_instance.feature_space_sym_map_.get(feature_name)
+    if sym_expr and hasattr(sisso_instance, 'sym_clean_to_original_map_') and sisso_instance.sym_clean_to_original_map_:
+        # Substitute the clean symbols (f0, f1) with original names (E_tet, etc.)
+        subbed_expr = sym_expr.subs(sisso_instance.sym_clean_to_original_map_)
+        return str(subbed_expr)
+    return feature_name
 
 
 class ParametricModel:
@@ -196,7 +209,177 @@ def _refine_model_with_nlopt(sisso_instance, y, sample_weight, current_model_dat
     
     return refined_model
 
-# Search Strategy Implementations
+def _find_best_models_sa(sisso_instance, phi_sis_df, y, D_max, task_type,
+                         max_feat_cross_corr, sample_weight, device, torch_device, **kwargs):
+    """
+    Finds models using Simulated Annealing (SA).
+    """
+    print("\n" + "="*20 + " Starting SA (Simulated Annealing) Search " + "="*20)
+    
+    phi_pruned = _prune_by_correlation(phi_sis_df, max_feat_cross_corr)
+    all_features = list(phi_pruned.columns)
+    n_total_features = len(all_features)
+    model_params = sisso_instance.model_params_
+    
+    initial_temp = sisso_instance.sa_initial_temp
+    cooling_rate = sisso_instance.sa_cooling_rate
+    acceptance_rule = sisso_instance.sa_acceptance_rule
+    iterations = getattr(sisso_instance, 'sa_iterations', 2000) # Get sa_iterations
+    
+    rng = np.random.default_rng(sisso_instance.random_state)
+    models_by_dim = {}
+
+    for D in range(1, D_max + 1):
+        t_start_d = time.time()
+        print(f"\n--- SA Search: Dimension {D} ({iterations} iterations) ---")
+        if D > n_total_features:
+            print(f"  Dimension {D} is larger than the number of available features ({n_total_features}). Stopping."); break
+
+        # Robust Initialization
+        current_features_list = None
+        current_score = float('inf')
+        init_attempts = 0
+        max_init_attempts = 1000 
+        while not np.isfinite(current_score) and init_attempts < max_init_attempts:
+            candidate_features = list(rng.choice(all_features, size=D, replace=False))
+            score, _ = _score_single_model(phi_pruned[candidate_features], y, task_type, model_params, sample_weight, device, torch_device)
+            if np.isfinite(score):
+                current_score = score
+                current_features_list = candidate_features
+            init_attempts += 1
+        
+        if not np.isfinite(current_score):
+            print(f"  Could not find a valid starting model for D={D} after {max_init_attempts} attempts. Skipping dimension.")
+            continue
+
+        best_features_for_D = current_features_list
+        best_score_for_D = current_score
+        
+        print(f"  Initial valid score for D={D}: {current_score:.6g}")
+        
+        T = initial_temp
+        
+        for i in range(iterations):
+            if len(current_features_list) >= n_total_features:
+                break
+            current_features_set = set(current_features_list)
+            
+            feature_to_remove = rng.choice(current_features_list)
+            
+            while True:
+                feature_to_add = rng.choice(all_features)
+                if feature_to_add not in current_features_set: # Fast O(1) check
+                    break
+            
+            new_features = [f for f in current_features_list if f != feature_to_remove] + [feature_to_add]
+            
+            new_score, model_data = _score_single_model(phi_pruned[new_features], y, task_type, model_params, sample_weight, device, torch_device)
+            
+            if np.isfinite(new_score):
+                delta_score = new_score - current_score
+
+                if delta_score < 0:
+                    current_features_list, current_score = new_features, new_score
+                    if new_score < best_score_for_D:
+                        best_features_for_D = new_features
+                        best_score_for_D = new_score
+                else:
+                    if acceptance_rule == 'glauber':
+                        acceptance_prob = 1.0 / (1.0 + np.exp(delta_score / T))
+                    else: # Metropolis
+                        acceptance_prob = np.exp(-delta_score / T)
+                    
+                    if rng.random() < acceptance_prob:
+                        current_features_list, current_score = new_features, new_score
+            
+            T *= cooling_rate
+
+        print(f"  Annealing for D={D} complete. Best score found: {best_score_for_D:.6g}")
+        final_X_df = phi_pruned[best_features_for_D]
+        final_score, final_model_data = _score_single_model(final_X_df, y, task_type, model_params, sample_weight, device, torch_device)
+        
+        sym_features = [sisso_instance.feature_space_sym_map_.get(f, sympy.sympify(f)) for f in best_features_for_D]
+        models_by_dim[D] = {
+            'features': best_features_for_D, 'score': final_score, 'model': final_model_data.get('model'),
+            'coef': final_model_data.get('coef'), 'sym_features': sym_features, 'is_parametric': False
+        }
+        sisso_instance.timing_summary_[f'SA Search D={D}'] = time.time() - t_start_d
+        
+    return models_by_dim
+
+def _find_best_models_rmhc(sisso_instance, phi_sis_df, y, X_df, D_max, task_type,
+                           max_feat_cross_corr, sample_weight, device, torch_device, **kwargs):
+    """
+    Finds models using Random Mutation Hill Climbing, seeded by a greedy search.
+    """
+    print("\n" + "="*20 + " Starting RMHC (Random Mutation Hill Climbing) Search " + "="*20)
+    
+    # 1. Seed the search with a fast greedy algorithm
+    print("--- RMHC: Seeding with initial Greedy Search ---")
+    greedy_args = locals().copy()
+    models_by_dim = _find_best_models_greedy(**greedy_args)
+
+    phi_pruned = _prune_by_correlation(phi_sis_df, max_feat_cross_corr)
+    all_features = list(phi_pruned.columns)
+    model_params = sisso_instance.model_params_
+    iterations = sisso_instance.rmhc_iterations
+    restarts = sisso_instance.rmhc_restarts
+    rng = np.random.default_rng(sisso_instance.random_state)
+
+    # 2. Refine each dimension with RMHC
+    for D in range(1, D_max + 1):
+        if D not in models_by_dim:
+            print(f"\n--- RMHC: No initial model for Dimension {D}, skipping. ---")
+            continue
+        
+        t_start_d = time.time()
+        print(f"\n--- RMHC: Refining Dimension {D} ({iterations} iterations x {restarts} restarts) ---")
+        
+        initial_model = models_by_dim[D]
+        best_features_for_D = initial_model['features']
+        best_score_for_D = initial_model['score']
+        
+        print(f"  Initial greedy score for D={D}: {best_score_for_D:.6g}")
+
+        for r in range(restarts):
+            current_features = best_features_for_D.copy()
+            current_score = best_score_for_D
+
+            for i in range(iterations):
+                if len(current_features) == 0: continue
+                
+                feature_to_remove = rng.choice(current_features)
+                candidate_pool = [f for f in all_features if f not in current_features]
+                if not candidate_pool: continue
+                
+                feature_to_add = rng.choice(candidate_pool)
+                mutated_combo = [f for f in current_features if f != feature_to_remove] + [feature_to_add]
+                
+                score, model_data = _score_single_model(phi_pruned[mutated_combo], y, task_type, model_params, sample_weight, device, torch_device)
+
+                if score < current_score:
+                    current_score = score
+                    current_features = mutated_combo
+                    # Only print if it's a new global best for this dimension to reduce verbosity
+                    if score < best_score_for_D:
+                        print(f"    Restart {r+1}/{restarts}, Iter {i+1}: Found new best combo for D={D}. Score: {score:.6g}")
+            
+            if current_score < best_score_for_D:
+                best_score_for_D = current_score
+                best_features_for_D = current_features
+        
+        print(f"  Refinement for D={D} complete. Final score: {best_score_for_D:.6g}")
+        final_X_df = phi_pruned[best_features_for_D]
+        final_score, final_model_data = _score_single_model(final_X_df, y, task_type, model_params, sample_weight, device, torch_device)
+        
+        sym_features = [sisso_instance.feature_space_sym_map_.get(f, sympy.sympify(f)) for f in best_features_for_D]
+        models_by_dim[D] = {
+            'features': best_features_for_D, 'score': final_score, 'model': final_model_data.get('model'),
+            'coef': final_model_data.get('coef'), 'sym_features': sym_features, 'is_parametric': False
+        }
+        sisso_instance.timing_summary_[f'RMHC Refinement D={D}'] = time.time() - t_start_d
+
+    return models_by_dim
 
 def _find_best_models_omp(sisso_instance, phi_sis_df, y, D_max, task_type,
                            max_feat_cross_corr, sample_weight, device, torch_device, **kwargs):
@@ -231,7 +414,8 @@ def _find_best_models_omp(sisso_instance, phi_sis_df, y, D_max, task_type,
         
         selected_features.append(best_new_feature)
         candidate_features_df.drop(columns=[best_new_feature], inplace=True)
-        print(f"  Selected feature for D={D_iter}: '{best_new_feature}'")
+        formula_str = _format_feature_str(sisso_instance, best_new_feature)
+        print(f"  Selected feature for D={D_iter}: '{formula_str}'")
 
         # Solve the least squares problem on the current set of selected features
         X_current_dim_df = phi_pruned[selected_features]
@@ -347,7 +531,10 @@ def _find_best_models_miqp(sisso_instance, phi_sis_df, y, D_max, task_type,
 
             if model_data is None: continue
 
+            formulas = [_format_feature_str(sisso_instance, f) for f in final_feature_names]
             print(f"    Optimal model for D={len(final_feature_names)} found with score: {score:.6g}")
+            print(f"      Features: {', '.join(formulas)}")
+            
             sym_features = [sisso_instance.feature_space_sym_map_.get(f, sympy.sympify(f)) for f in final_feature_names]
             models_by_dim[len(final_feature_names)] = {
                 'features': final_feature_names, 'score': score, 'model': model_data.get('model'),
@@ -409,7 +596,8 @@ def _find_best_models_ch_greedy(sisso_instance, phi_sis_df, y, D_max, task_type,
 
         selected_features.append(best_new_feature)
         sisso_instance.timing_summary_[f'Geometric Search D={D_iter}'] = time.time() - t_start_d
-        print(f"    Best feature for D={D_iter}: '{best_new_feature}'")
+        formula_str = _format_feature_str(sisso_instance, best_new_feature)
+        print(f"    Best feature for D={D_iter}: '{formula_str}'")
         print(f"    Best model score for D={D_iter} (overlap): {best_score:.6g}")
 
         sym_features = [sisso_instance.feature_space_sym_map_.get(f, sympy.sympify(f)) for f in selected_features]
@@ -505,9 +693,40 @@ def _find_best_models_greedy(sisso_instance, phi_sis_df, y, X_df, D_max, task_ty
         if sorted_candidates_series.empty:
             print(f"  SIS found no new correlated features. Stopping at D={D_iter-1}."); break
 
+        print(f"  SIS screening on residual complete. Top candidates:")
+        top_features_data = []
+        for i in range(min(5, len(sorted_candidates_series))):
+            feat_name = sorted_candidates_series.index[i]
+            sis_score = sorted_candidates_series.iloc[i]
+            formula = _format_feature_str(sisso_instance, feat_name)
+            
+            rmse_on_residual = np.nan
+            try:
+                X_feat = features_to_screen_df[[feat_name]].values
+                model = LinearRegression().fit(X_feat, current_target)
+                y_pred_residual = model.predict(X_feat)
+                rmse_on_residual = np.sqrt(mean_squared_error(current_target, y_pred_residual))
+            except Exception:
+                pass
+
+            top_features_data.append((i + 1, sis_score, rmse_on_residual, formula))
+        
+        if top_features_data:
+            max_formula_len = max(len(f) for _, _, _, f in top_features_data) if top_features_data else 0
+            # Header
+            rank_w, sis_w, rmse_w = 5, 11, 15
+            header = f"    {'Rank':<{rank_w}} | {'SIS Score':<{sis_w}} | {'RMSE (on res.)':<{rmse_w}} | Formula"
+            separator = f"    {'-'*rank_w}-+-{'-'*sis_w}-+-{'-'*rmse_w}-+-{'-'*max(7, max_formula_len)}"
+            print(header)
+            print(separator)
+            # Rows
+            for rank, sis_score, rmse, formula in top_features_data:
+                print(f"    {rank:<{rank_w}} | {sis_score:<{sis_w}.4f} | {rmse:<{rmse_w}.4f} | {formula}")
+
         best_new_feature = sorted_candidates_series.index[0]
         selected_features.append(best_new_feature)
-        print(f"  Selected feature for D={D_iter}: '{best_new_feature}'")
+        formula_str = _format_feature_str(sisso_instance, best_new_feature)
+        print(f"  Selected feature for D={D_iter}: '{formula_str}'")
 
         X_current_dim_df = phi_pruned[selected_features]
         score, model_data = _score_single_model(X_current_dim_df, y, task_type, model_params, sample_weight, device, torch_device)
