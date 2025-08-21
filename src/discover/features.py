@@ -590,13 +590,36 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
         is_gpu_run = xp != np
         candidate_names = [str(_canonicalize_expr(f.sym_expr)) for f in candidate_features_map.values()]
         candidate_sym_map = {name: f.sym_expr for name, f in zip(candidate_names, candidate_features_map.values())}
-
-        if sis_method == 'decision_tree':
-            print(f"  Screening and pruning {len(candidate_features_map)} candidates using Decision Tree (Bayesian Apriori)...")
-            if is_gpu_run:
-                warnings.warn("Decision Tree SIS is CPU-only. Data will be moved from GPU to CPU for this step.")
-
-            # 1. Get numerical data on CPU
+        
+        phi_tensor = None
+        temp_phi_df = None
+        
+        if is_gpu_run and sis_method == 'correlation':
+            try:
+                feature_tensors = [feat.values.reshape(-1, 1) for feat in candidate_features_map.values()]
+                phi_tensor = xp.hstack(feature_tensors) if xp == cp else torch.cat(feature_tensors, dim=1)
+                
+                print(f"  Screening and pruning {len(candidate_features_map)} candidates using correlation on GPU...")
+                sis_score_label = "SIS Score"
+                sorted_scores_series = run_SIS(
+                    phi=None, y=y, task_type=task_type, xp=xp, multitask_sis_method=multitask_sis_method,
+                    phi_tensor=phi_tensor, phi_names=candidate_names
+                )
+            except Exception as e:
+                warnings.warn(f"GPU Screening failed: {e}. Falling back to CPU.")
+                phi_tensor = None 
+                is_gpu_run = False 
+        
+        if phi_tensor is None:
+            if sis_method == 'decision_tree':
+                 print(f"  Screening and pruning {len(candidate_features_map)} candidates using Decision Tree (Bayesian Apriori)...")
+                 sis_score_label = "Hybrid Score"
+                 if is_gpu_run:
+                     warnings.warn("Decision Tree SIS is CPU-only. Data will be moved from GPU to CPU for this step.")
+            else: # Default correlation-based SIS on CPU
+                 print(f"  Screening and pruning {len(candidate_features_map)} candidates using correlation on CPU...")
+                 sis_score_label = "SIS Score"
+            
             temp_values_dict = {
                 name: (cp.asnumpy(feat.values) if isinstance(feat.values, cp.ndarray)
                        else feat.values.cpu().numpy() if isinstance(feat.values, torch.Tensor)
@@ -605,51 +628,32 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
             }
             temp_phi_df = pd.DataFrame(temp_values_dict, index=X.index)
 
-            # 2. Get feature importances (Likelihood)
-            print("    - Training decision tree to get feature importances (likelihood)...")
-            if task_type in ALL_CLASSIFICATION_TASKS:
-                dt = DecisionTreeClassifier(max_depth=5, random_state=42)
-            else: # Regression or Multitask
-                dt = DecisionTreeRegressor(max_depth=5, random_state=42)
-            
-            dt.fit(temp_phi_df, y)
-            importances = pd.Series(dt.feature_importances_, index=temp_phi_df.columns)
+            if sis_method == 'decision_tree':
+                print("    - Training decision tree to get feature importances (likelihood)...")
+                if task_type in ALL_CLASSIFICATION_TASKS:
+                    dt = DecisionTreeClassifier(max_depth=5, random_state=42)
+                else: 
+                    dt = DecisionTreeRegressor(max_depth=5, random_state=42)
+                
+                dt.fit(temp_phi_df, y)
+                importances = pd.Series(dt.feature_importances_, index=temp_phi_df.columns)
 
-            # 3. Calculate complexity (Prior)
-            print("    - Calculating complexity score for each feature (prior)...")
-            complexities = pd.Series({
-                str(_canonicalize_expr(f.sym_expr)): _calculate_complexity(f.sym_expr)
-                for f in candidate_features_map.values()
-            })
-            # Prior is inverse of complexity. Add 1 to avoid division by zero and smooth the effect.
-            priors = 1.0 / (1.0 + complexities)
+                print("    - Calculating complexity score for each feature (prior)...")
+                complexities = pd.Series({
+                    str(_canonicalize_expr(f.sym_expr)): _calculate_complexity(f.sym_expr)
+                    for f in candidate_features_map.values()
+                })
+                priors = 1.0 / (1.0 + complexities)
 
-            # 4. Combine to get final score (Posterior)
-            print("    - Combining importance and complexity for final ranking...")
-            # Align series before multiplying, fill missing with 0
-            aligned_importances, aligned_priors = importances.align(priors, fill_value=0)
-            final_scores = aligned_importances * aligned_priors
-            
-            sorted_scores_series = final_scores.sort_values(ascending=False)
-            sis_score_label = "Hybrid Score"
-
-        else: # Default correlation-based SIS
-            print(f"  Screening and pruning {len(candidate_features_map)} candidates using correlation...")
-            sis_score_label = "SIS Score"
-            if is_gpu_run:
-                feature_tensors = [feat.values.reshape(-1, 1) for feat in candidate_features_map.values()]
-                phi_tensor = xp.hstack(feature_tensors) if xp == cp else torch.cat(feature_tensors, dim=1)
-                sorted_scores_series = run_SIS(
-                    phi=None, y=y, task_type=task_type, xp=xp, multitask_sis_method=multitask_sis_method,
-                    phi_tensor=phi_tensor, phi_names=candidate_names
-                )
-            else:
-                temp_values_dict = {name: feat.values for name, feat in zip(candidate_names, 
-                                                        candidate_features_map.values())}
-                temp_phi_df = pd.DataFrame(temp_values_dict, index=X.index)
-                sorted_scores_series = run_SIS(temp_phi_df, y, task_type, xp=xp, 
+                print("    - Combining importance and complexity for final ranking...")
+                aligned_importances, aligned_priors = importances.align(priors, fill_value=0)
+                final_scores = aligned_importances * aligned_priors
+                
+                sorted_scores_series = final_scores.sort_values(ascending=False)
+            else: # Correlation on CPU
+                sorted_scores_series = run_SIS(temp_phi_df, y, task_type, xp=np, 
                                                multitask_sis_method=multitask_sis_method)
-
+        
         if not isinstance(sorted_scores_series, pd.Series) or sorted_scores_series.empty:
             print("  SIS screening returned no features. Stopping."); break
         
@@ -670,9 +674,7 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
             rmse = np.nan
             r2 = np.nan
             try:
-                # <--- MODIFIED CODE START
-                if 'phi_tensor' in locals() and is_gpu_run and sis_method == 'correlation':
-                # <--- MODIFIED CODE END
+                if phi_tensor is not None:
                     feat_idx = candidate_names.index(feat_name)
                     # Get feature values, move to CPU for sklearn
                     if xp == cp:
@@ -693,7 +695,7 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
             top_features_data.append((i + 1, sis_score, rmse, r2, formula))
 
         if top_features_data:
-            max_formula_len = max(len(f) for _, _, _, _, f in top_features_data)
+            max_formula_len = max(len(f) for _, _, _, _, f in top_features_data) if top_features_data else 0
             # Header
             rank_w, sis_w, rmse_w, r2_w = 5, 12, 11, 11
             header = f"    {'Rank':<{rank_w}} | {sis_score_label:<{sis_w}} | {'RMSE':<{rmse_w}} | {'R2 Score':<{r2_w}} | Formula"
@@ -719,9 +721,7 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
         # Within top-k, remove near-numerical duplicates (On GPU if possible) --------------------------------
         if len(top_k_names) > 1:
             print(f"    Filtering {len(top_k_names)} top-scoring features to remove redundancies.")
-            # <--- MODIFIED CODE START
-            if is_gpu_run and sis_method == 'correlation':
-            # <--- MODIFIED CODE END
+            if phi_tensor is not None:
                 # to avoid a costly GPU->CPU transfer of the correlation matrix.
                 top_k_indices = [candidate_names.index(n) for n in top_k_names]
                 top_k_tensor = phi_tensor[:, top_k_indices]
@@ -783,7 +783,7 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
                     print(f"    Removed {len(top_k_names) - len(keep)} redundant features. Kept {len(keep)}.")
                 top_k_names = keep
 
-        # prune candidate map to survivors ---------------------------------------------------------------------
+        # prune candidate map to survivors ----------------
         pruned_map = {}
         for expr, feat in candidate_features_map.items():
             if str(_canonicalize_expr(expr)) in top_k_names:
@@ -803,7 +803,7 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
         if d < depth:
             print(f"    {len(last_level_features)} features (survivors from this depth) will form the basis for depth {d+1}.")
 
-    # finalize --------------------------------------------------------------------------------------------------
+    # finalize -------------------------------------
     print("\nIterative feature generation complete.")
     final_features_list = list(candidate_features_map.values())
 
