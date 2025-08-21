@@ -101,7 +101,7 @@ Here is a minimal example:
   "selection_method": "cv",
   "cv": 5
 }
-
+```
 ### Step 3: Run the Analysis
 
 Execute `run_discover.py` from your terminal, passing the configuration file as the argument:
