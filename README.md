@@ -20,6 +20,8 @@ This tool is ideal for **researchers and data scientists** in materials science,
     * **SISSO++:** A highly efficient, breadth-first search using QR decomposition.
     * **Orthogonal Matching Pursuit (OMP):** A robust greedy method for regression.
     * **MIQP (Gurobi):** Provably finds the optimal L0-norm model (requires Gurobi license).
+    * **Random Mutation Hill Climing (RHMC):** 
+    * **Simulated Anneling (SA), Grober and Matropolis**
 * **Diverse Machine Learning Tasks:**
     * **Regression:** Linear (Ridge), Robust (Huber), and Multi-Task models.
     * **Classification:** Logistic Regression, Support Vector Machines (SVM), and Convex Hull-based classifiers.
