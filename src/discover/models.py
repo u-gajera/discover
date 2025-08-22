@@ -404,6 +404,8 @@ class DiscoverBase(BaseEstimator):
         print(f"\nFinal feature space size after iterative screening: {self.feature_space_df_.shape[1]}")
         if self.feature_space_df_.empty:
             raise RuntimeError("Iterative feature generation resulted in an empty space.")
+
+        self.feature_space_df_.columns = self.feature_space_df_.columns.astype(str)        
         self.feature_space_df_ = self.feature_space_df_.astype(self.dtype)
 
         t_start_search = time.time()

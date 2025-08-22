@@ -603,7 +603,6 @@ def _find_best_models_ch_greedy(sisso_instance, phi_sis_df, y, D_max, task_type,
 
 def _score_brute_force_combo(combo, phi_df, y, task_type, model_params, 
                              sample_weight, device, torch_device):
-    """Helper function for parallelized brute-force scoring."""
     X_combo_df = phi_df[list(combo)]
     score, model_data = _score_single_model(X_combo_df, y, task_type, model_params, 
                                             sample_weight, device, torch_device)
@@ -615,9 +614,7 @@ def _score_brute_force_combo(combo, phi_df, y, task_type, model_params,
 def _find_best_models_brute_force(sisso_instance, phi_sis_df, y, D_max, task_type,
                                    max_feat_cross_corr, sample_weight, device, 
                                    torch_device, **kwargs):
-    """
-    Finds the best model for each dimension by testing all combinations.
-    """
+
     print("\n" + "="*20 + " Starting Brute-Force Search " + "="*20)
     models_by_dim = {}
     phi_pruned = _prune_by_correlation(phi_sis_df, max_feat_cross_corr)

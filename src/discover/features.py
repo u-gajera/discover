@@ -69,7 +69,6 @@ def _safe_min_max(arr, xp=np):
     return amin, amax
 
 def _calculate_complexity(expr):
-    """Calculate the complexity of a SymPy expression by counting operations."""
     return 1 + sympy.count_ops(expr)
 
 PARAMETRIC_OP_DEFS = {
@@ -265,7 +264,6 @@ class UFeature:
        ]
 
     def get_unary_op_func(self, op_name):
-        """Returns the function for a given unary operator name."""
         op_map = {
            'sqrt': self.sqrt, 'cbrt': self.cbrt, 'abs': self.abs, 'log': self.log,
            'exp': self.exp, 'exp-': self.exp_neg, 'sin': self.sin, 'cos': self.cos,
@@ -288,7 +286,6 @@ class UFeature:
 
 
 def apply_op(f, op_func, min_val, max_val):
-    """Helper to apply a unary operator and check for validity."""
     if f.values.dtype in [np.float32, (torch.float32 if TORCH_AVAILABLE else None)]:
         epsilon = 1e-7
     else:
@@ -308,7 +305,6 @@ def apply_op(f, op_func, min_val, max_val):
 
 
 def apply_binary_op(f1, f2, op_name, min_val, max_val):
-    """Helper to apply a binary operator and check for validity."""
     epsilon = 1e-7 if f1.xp == torch and f1.values.dtype == torch.float32 else 1e-9
     try:
         op_method_name = UFeature.get_binary_op_method_name(op_name)
@@ -331,7 +327,6 @@ def apply_binary_op(f1, f2, op_name, min_val, max_val):
     return None
 
 def apply_custom_binary_op(f1, f2, op_def, min_val, max_val):
-    """Helper to apply a custom binary operator."""
     epsilon = 1e-7 if f1.xp == torch and f1.values.dtype == torch.float32 else 1e-9
     try:
         op_name = op_def.get('op_name', '?')
@@ -353,7 +348,6 @@ def apply_custom_binary_op(f1, f2, op_def, min_val, max_val):
 
 # It no longer copies data to the CPU if it's already on the GPU.
 def apply_parametric_op(feature, op_def, min_val, max_val):
-    """Applies a parametric operator with its initial default parameter values."""
     epsilon = 1e-7 if feature.xp == torch and feature.values.dtype == torch.float32 else 1e-9
     xp = feature.xp
     try:
@@ -388,7 +382,6 @@ def apply_parametric_op(feature, op_def, min_val, max_val):
         return None
 
 def _canonicalize_expr(expr):
-    """Return a canonical SymPy expression for duplicate detection."""
     try:
         e = expr
         def _sq_pow_to_abs(ex):
@@ -455,7 +448,6 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
                                   task_type, sis_method, multitask_sis_method,
                                   unary_rungs=1, xp=np, dtype=np.float64, 
                                   torch_device=None):
-    """Breadth-first SIS-driven feature generator (feature-space only)."""
     from .scoring import run_SIS  
 
     ureg = None

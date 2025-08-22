@@ -414,7 +414,6 @@ def _score_single_model(X_combo_df, y, task_type, model_params, sample_weight,
         return float('inf'), None
 
 def _run_cv(X_features, y, cv_splitter, task_type, model_params, sample_weight):
-    """Runs a full cross-validation loop for a given set of features."""
     scores = []
     score_func = SCORE_FUNCTIONS[task_type]
     sw_series = pd.Series(sample_weight, 
