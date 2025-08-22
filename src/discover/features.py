@@ -1,3 +1,5 @@
+# Author: Uday Gajera
+# Date: 21st August 2025
 """
 Feature-space construction utilities.
 
@@ -25,8 +27,6 @@ from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
 from .constants import ALL_CLASSIFICATION_TASKS, REGRESSION
 
-
-# Optional CuPy and Torch acceleration -----------------------------------------------------------
 try:
     import cupy as cp
     CUPY_AVAILABLE = True
@@ -53,16 +53,11 @@ except ImportError:
         @staticmethod
         def cos(arr): return np.cos(arr)
 
-# Pint -----------------------------------------------------------------
 try:
     import pint
     PINT_AVAILABLE = True
 except ImportError:
     PINT_AVAILABLE = False
-
-# ------------------------------------------------------------------------
-# Utility helpers
-# ------------------------------------------------------------------------
 
 def _safe_min_max(arr, xp=np):
     if xp == torch:
@@ -77,8 +72,6 @@ def _calculate_complexity(expr):
     """Calculate the complexity of a SymPy expression by counting operations."""
     return 1 + sympy.count_ops(expr)
 
-
-#  Operator Definitions
 PARAMETRIC_OP_DEFS = {
     'exp-': {
         'func': lambda f, p, xp: xp.exp(-p[0] * f),
@@ -132,10 +125,10 @@ CUSTOM_BINARY_OP_DEFS = {
         'op_name': "|-|"
     }
 }
-#  Feature Generation (with Unit-Awareness and Operator Control)
 class UFeature:
     def __init__(self, name, values, unit, ureg, sym_expr, 
-                 base_features, xp=np, dtype=np.float64, torch_device=None):
+                 base_features, xp=np, dtype=np.float64, 
+                 torch_device=None):
         self.name = name
         self.xp = xp
         self.torch_device = torch_device
@@ -152,8 +145,9 @@ class UFeature:
             else:
                 # Otherwise, create it from numpy/list.
                 torch_dtype = {np.float32: torch.float32,
-                               np.float64: torch.float64}.get(np.dtype(dtype).type, torch.float32)
-                self.values = torch.tensor(vals, dtype=torch_dtype, device=self.torch_device)
+                    np.float64: torch.float64}.get(np.dtype(dtype).type, torch.float32)
+                self.values = torch.tensor(vals, 
+                                dtype=torch_dtype, device=self.torch_device)
         else:
             self.values = xp.asarray(vals, dtype=dtype)
 
@@ -201,7 +195,8 @@ class UFeature:
                                         lambda a, b: a * b, lambda a, b: a * b, '*')
     def __truediv__(self, other):
         if other.has_zero: return None
-        return self._apply_binary_op(other, lambda a, b: a / b, lambda a, b: a / b, '/')
+        return self._apply_binary_op(other, lambda a, b: a / b, 
+                                     lambda a, b: a / b, '/')
 
     def _apply_unary_op(self, val_op, unit_op, sym_op, name_func, 
                         unit_check=None, domain_check=None):
@@ -451,8 +446,7 @@ def _is_numerically_duplicate(new_feat, existing_feats, tol=1e-12):
     return False
 
 # ------------------------------------------------------------------------------
-# Core iterative generator (patched sections marked)
-# ----------------------------------------------------------------------------
+# Core iterative generator 
 
 def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis_iter,
                                   sis_score_degeneracy_epsilon,
@@ -462,9 +456,8 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
                                   unary_rungs=1, xp=np, dtype=np.float64, 
                                   torch_device=None):
     """Breadth-first SIS-driven feature generator (feature-space only)."""
-    from .scoring import run_SIS  # local import to avoid circular
+    from .scoring import run_SIS  
 
-    # --- Setup -----------------------------------------------------------
     ureg = None
     if PINT_AVAILABLE:
         ureg = pint.UnitRegistry()
@@ -506,7 +499,6 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
         print(f"\n  Depth {d}: Generating new features...")
         newly_added_this_level = []
 
-        # --- Unary ops ---------------------------------------------------------
         apply_unary_now = (not interaction_only) and (d <= unary_rungs)
         if apply_unary_now:
             for f in last_level_features:
@@ -522,7 +514,8 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
                     elif op_name in CUSTOM_UNARY_OP_DEFS:
                         op_def = CUSTOM_UNARY_OP_DEFS[op_name]
                         op_func = lambda: f._apply_unary_op(op_def['func'],
-                                                            op_def.get('unit_op', lambda u: u),
+                                                            op_def.get('unit_op', 
+                                                                       lambda u: u),
                                                             op_def['sym_func'],
                                                             op_def['name_func'],
                                                             op_def.get('unit_check'),
@@ -568,8 +561,10 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
                     elif op_name in CUSTOM_BINARY_OP_DEFS:
                         if f2.name < f1.name:
                             continue
-                        res = apply_custom_binary_op(f1, f2, CUSTOM_BINARY_OP_DEFS[op_name],
-                                                     min_abs_feat_val, max_abs_feat_val)
+                        res = apply_custom_binary_op(f1, f2, 
+                                                     CUSTOM_BINARY_OP_DEFS[op_name],
+                                                     min_abs_feat_val, 
+                                                     max_abs_feat_val)
 
                     if res:
                         expr, feat = res
@@ -652,7 +647,7 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
                 sorted_scores_series = final_scores.sort_values(ascending=False)
             else: # Correlation on CPU
                 sorted_scores_series = run_SIS(temp_phi_df, y, task_type, xp=np, 
-                                               multitask_sis_method=multitask_sis_method)
+                                        multitask_sis_method=multitask_sis_method)
         
         if not isinstance(sorted_scores_series, pd.Series) or sorted_scores_series.empty:
             print("  SIS screening returned no features. Stopping."); break
@@ -696,18 +691,14 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
 
         if top_features_data:
             max_formula_len = max(len(f) for _, _, _, _, f in top_features_data) if top_features_data else 0
-            # Header
             rank_w, sis_w, rmse_w, r2_w = 5, 12, 11, 11
             header = f"    {'Rank':<{rank_w}} | {sis_score_label:<{sis_w}} | {'RMSE':<{rmse_w}} | {'R2 Score':<{r2_w}} | Formula"
             separator = f"    {'-'*rank_w}-+-{'-'*sis_w}-+-{'-'*rmse_w}-+-{'-'*r2_w}-+-{'-'*max(7, max_formula_len)}"
             print(header)
             print(separator)
-            # Rows
             for rank, sis_score, rmse, r2, formula in top_features_data:
                 print(f"    {rank:<{rank_w}} | {sis_score:<{sis_w}.4g} | {rmse:<{rmse_w}.4f} | {r2:<{r2_w}.4f} | {formula}")
 
-
-        # keep top-k + degeneracy ------------------------------------------------------------------------------
         if len(sorted_scores_series) <= n_features_per_sis_iter:
             top_k_names = sorted_scores_series.index.tolist()
         else:
@@ -718,11 +709,9 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
             if len(top_k_names) > n_features_per_sis_iter:
                 print(f"    (Kept {len(top_k_names) - n_features_per_sis_iter} additional features due to score degeneracy)")
 
-        # Within top-k, remove near-numerical duplicates (On GPU if possible) --------------------------------
         if len(top_k_names) > 1:
             print(f"    Filtering {len(top_k_names)} top-scoring features to remove redundancies.")
             if phi_tensor is not None:
-                # to avoid a costly GPU->CPU transfer of the correlation matrix.
                 top_k_indices = [candidate_names.index(n) for n in top_k_names]
                 top_k_tensor = phi_tensor[:, top_k_indices]
 
@@ -734,27 +723,23 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
 
                 if std_devs.ndim > 1: std_devs = std_devs.squeeze()
 
-                # Calculate correlation matrix on GPU
                 corr_matrix_gpu = cov_matrix / xp.outer(std_devs, std_devs)
-                corr_matrix_gpu[xp.isnan(corr_matrix_gpu)] = 0 # Handle potential div by zero
+                corr_matrix_gpu[xp.isnan(corr_matrix_gpu)] = 0 
 
                 if xp == torch:
                     corr_matrix_gpu.fill_diagonal_(1.0)
-                else: # for numpy and cupy
+                else: 
                     corr_matrix_gpu[xp.diag_indices_from(corr_matrix_gpu)] = 1.0
 
                 corr_matrix = xp.abs(corr_matrix_gpu)
                 
-                # Greedy filtering on GPU
                 to_remove_mask = xp.zeros(len(top_k_names), dtype=bool)
                 for i in range(len(top_k_names)):
                     if to_remove_mask[i]:
                         continue
-                    # Mark features to the right of 'i' that are highly correlated for removal
                     duplicates_in_slice = corr_matrix[i, i+1:] > 0.999
                     to_remove_mask[i+1:][duplicates_in_slice] = True
                 
-                # Get final indices to keep and convert back to CPU only for name lookup
                 keep_indices = xp.where(~to_remove_mask)[0]
                 if xp == torch:
                     keep_indices_cpu = keep_indices.cpu().numpy()
@@ -768,7 +753,7 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
                     print(f"    Removed {original_count - len(final_top_k_names)} redundant features. Kept {len(final_top_k_names)}.")
                 top_k_names = final_top_k_names
 
-            else: # Original CPU path
+            else: 
                 top_k_indices = [candidate_names.index(n) for n in top_k_names]
                 corr_matrix = temp_phi_df[top_k_names].corr().abs()
 
@@ -783,7 +768,6 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
                     print(f"    Removed {len(top_k_names) - len(keep)} redundant features. Kept {len(keep)}.")
                 top_k_names = keep
 
-        # prune candidate map to survivors ----------------
         pruned_map = {}
         for expr, feat in candidate_features_map.items():
             if str(_canonicalize_expr(expr)) in top_k_names:
@@ -803,7 +787,6 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
         if d < depth:
             print(f"    {len(last_level_features)} features (survivors from this depth) will form the basis for depth {d+1}.")
 
-    # finalize -------------------------------------
     print("\nIterative feature generation complete.")
     final_features_list = list(candidate_features_map.values())
 

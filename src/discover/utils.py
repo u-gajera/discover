@@ -1,3 +1,5 @@
+# Author: Uday Gajera
+# Date: 22st July 2025
 """
 Assorted helper functions (logging, timing, safe NumPy wrappers, etc.).
 
@@ -27,9 +29,7 @@ except ImportError:
 
 
 
-#  Plotting
 def _get_score_label(task_type, loss, selection_method='cv'):
-    """Returns a human-readable string for the score metric."""
     if selection_method == 'aic':
         return 'AIC Score'
     if selection_method == 'bic':
@@ -46,8 +46,8 @@ def _get_score_label(task_type, loss, selection_method='cv'):
     method_label = "CV" if selection_method == 'cv' else "OOB"
     return f'{score_name} ({method_label})'
 
-def plot_cv_results(cv_results, best_D, task_type, loss, selection_method='cv', ax=None, save_path=None):
-    """Plots the cross-validation, bootstrap OOB, or information criterion score."""
+def plot_cv_results(cv_results, best_D, task_type, loss, selection_method='cv', 
+                    ax=None, save_path=None):
     if not cv_results: return None
     if ax is None: fig, ax = plt.subplots(figsize=(7, 5)); own_fig = True
     else: fig = ax.figure; own_fig = False
@@ -63,7 +63,8 @@ def plot_cv_results(cv_results, best_D, task_type, loss, selection_method='cv', 
         ax.errorbar(dims, means, yerr=stds, fmt='-o', capsize=4, label='Mean Score')
         
     if best_D in dims:
-        ax.plot(best_D, cv_results[best_D][0], 'r*', markersize=12, label=f'Best D={best_D}')
+        ax.plot(best_D, cv_results[best_D][0], 'r*', markersize=12, 
+                label=f'Best D={best_D}')
     
     title_map = {
         'bootstrap': "Bootstrap OOB Score vs. Dimension",
@@ -82,10 +83,10 @@ def plot_cv_results(cv_results, best_D, task_type, loss, selection_method='cv', 
     return fig
 
 def plot_parity(sisso_instance, X, y, sample_weight=None, ax=None, save_path=None):
-    """Generates a parity plot (predicted vs. actual) for regression tasks."""
     from sklearn.metrics import r2_score, mean_squared_error
     
-    if sisso_instance.task_type_ not in [REGRESSION, MULTITASK] or sisso_instance.best_model_ is None:
+    if sisso_instance.task_type_ not in [REGRESSION, 
+                                    MULTITASK] or sisso_instance.best_model_ is None:
         return None
     if ax is None: fig, ax = plt.subplots(figsize=(6, 6)); own_fig = True
     else: fig = ax.figure; own_fig = False
@@ -106,7 +107,8 @@ def plot_parity(sisso_instance, X, y, sample_weight=None, ax=None, save_path=Non
     rmse = np.sqrt(mean_squared_error(y_true, y_pred_vals, sample_weight=sw))
     
     ax.scatter(y_true, y_pred_vals, alpha=0.5, label=f'R²={r2:.3f}, RMSE={rmse:.3f}')
-    min_val, max_val = min(np.min(y_true), np.min(y_pred_vals)), max(np.max(y_true), np.max(y_pred_vals))
+    min_val, max_val = min(np.min(y_true), np.min(y_pred_vals)), max(np.max(y_true), 
+                                                                np.max(y_pred_vals))
     ax.plot([min_val, max_val], [min_val, max_val], 'r--', label="y=x")
     ax.set_xlabel("Actual Value"); ax.set_ylabel("Predicted Value")
     ax.set_title(f"Parity Plot D={sisso_instance.best_D_}{title_suffix}")
@@ -116,9 +118,10 @@ def plot_parity(sisso_instance, X, y, sample_weight=None, ax=None, save_path=Non
     if save_path: plt.savefig(save_path); plt.close(fig)
     return fig
 
-def plot_classification_2d(sisso_instance, X, y, ax=None, save_path=None, resolution=150):
-    """Plots the 2D decision boundary for 2-dimensional classification models."""
-    is_parametric = hasattr(sisso_instance.best_model_, 'is_parametric') and sisso_instance.best_model_.is_parametric
+def plot_classification_2d(sisso_instance, X, y, ax=None, 
+                           save_path=None, resolution=150):
+    is_parametric = hasattr(sisso_instance.best_model_, 
+                        'is_parametric') and sisso_instance.best_model_.is_parametric
     if sisso_instance.task_type_ not in ALL_CLASSIFICATION_TASKS or sisso_instance.best_D_ != 2 or is_parametric:
         if is_parametric: print("Plotting: 2D classification plot not supported for parametric models.")
         elif sisso_instance.best_model_ is not None and sisso_instance.task_type_ in ALL_CLASSIFICATION_TASKS and sisso_instance.best_D_ != 2:
@@ -130,37 +133,49 @@ def plot_classification_2d(sisso_instance, X, y, ax=None, save_path=None, resolu
     X_desc = sisso_instance._transform_X(X)
     x_min, x_max = X_desc.iloc[:, 0].min() - 0.5, X_desc.iloc[:, 0].max() + 0.5
     y_min, y_max = X_desc.iloc[:, 1].min() - 0.5, X_desc.iloc[:, 1].max() + 0.5
-    xx, yy = np.meshgrid(np.linspace(x_min, x_max, resolution), np.linspace(y_min, y_max, resolution))
+    xx, yy = np.meshgrid(np.linspace(x_min, x_max, resolution), np.linspace(y_min, 
+                                                                    y_max, resolution))
     colors = plt.cm.get_cmap('viridis', len(sisso_instance.classes_))
-    cmap_light = mcolors.ListedColormap(colors(np.linspace(0, 1, len(sisso_instance.classes_))))
+    cmap_light = mcolors.ListedColormap(colors(np.linspace(0, 1, 
+                                                        len(sisso_instance.classes_))))
 
     if sisso_instance.task_type_ == CH_CLASSIFICATION:
         for i, c in enumerate(sisso_instance.classes_):
             if c in sisso_instance.best_model_:
                 hull = sisso_instance.best_model_[c]
-                for simplex in hull.simplices: ax.plot(hull.points[simplex, 0], hull.points[simplex, 1], color=colors(i), lw=2)
-            ax.scatter(X_desc[y == c].iloc[:, 0], X_desc[y == c].iloc[:, 1], color=colors(i), label=f'Class {c}', alpha=0.7, edgecolors='k', s=40)
+                for simplex in hull.simplices: ax.plot(hull.points[simplex, 0], 
+                                                       hull.points[simplex, 1], 
+                                                       color=colors(i), lw=2)
+            ax.scatter(X_desc[y == c].iloc[:, 0], X_desc[y == c].iloc[:, 1], 
+                       color=colors(i), label=f'Class {c}', alpha=0.7, 
+                       edgecolors='k', s=40)
     else:
-        mesh_input_df = pd.DataFrame(np.c_[xx.ravel(), yy.ravel()], columns=X_desc.columns)
+        mesh_input_df = pd.DataFrame(np.c_[xx.ravel(), yy.ravel()], 
+                                     columns=X_desc.columns)
         Z_pred = sisso_instance.best_model_.predict(mesh_input_df)
         class_map = {cls: i for i, cls in enumerate(sisso_instance.classes_)}
         Z = np.array([class_map.get(p, -1) for p in Z_pred]).reshape(xx.shape)
         ax.contourf(xx, yy, Z, cmap=cmap_light, alpha=0.4)
         for i, c in enumerate(sisso_instance.classes_):
-            ax.scatter(X_desc[y == c].iloc[:, 0], X_desc[y == c].iloc[:, 1], color=colors(i), edgecolor='k', s=40, label=f'Class {c}')
+            ax.scatter(X_desc[y == c].iloc[:, 0], X_desc[y == c].iloc[:, 1], 
+                       color=colors(i), edgecolor='k', s=40, label=f'Class {c}')
     
-    desc_f1 = print_descriptor_formula([sisso_instance.best_descriptor_[0]], None, sisso_instance.task_type_, True, clean_to_original_map=sisso_instance.sym_clean_to_original_map_).split("=")[-1].strip()
-    desc_f2 = print_descriptor_formula([sisso_instance.best_descriptor_[1]], None, sisso_instance.task_type_, True, clean_to_original_map=sisso_instance.sym_clean_to_original_map_).split("=")[-1].strip()
+    desc_f1 = print_descriptor_formula([sisso_instance.best_descriptor_[0]], 
+                    None, sisso_instance.task_type_, True, 
+                    clean_to_original_map=sisso_instance.sym_clean_to_original_map_).split("=")[-1].strip()
+    desc_f2 = print_descriptor_formula([sisso_instance.best_descriptor_[1]], 
+                    None, sisso_instance.task_type_, True, 
+                    clean_to_original_map=sisso_instance.sym_clean_to_original_map_).split("=")[-1].strip()
 
     ax.set_xlabel(f'D1: {desc_f1}'); ax.set_ylabel(f'D2: {desc_f2}')
-    ax.set_title('Decision Map (D=2)'); ax.legend(); ax.grid(True, linestyle='--', alpha=0.5)
+    ax.set_title('Decision Map (D=2)'); ax.legend(); ax.grid(True, 
+                                                        linestyle='--', alpha=0.5)
 
     if own_fig: plt.tight_layout()
     if save_path: plt.savefig(save_path); plt.close(fig)
     return fig
 
 def plot_classification_3d(sisso_instance, X, y, save_path=None):
-    """Generates a 3D scatter plot of the descriptor space for 3D classification models."""
     is_parametric = hasattr(sisso_instance.best_model_, 'is_parametric') and sisso_instance.best_model_.is_parametric
     if sisso_instance.task_type_ not in ALL_CLASSIFICATION_TASKS or sisso_instance.best_D_ != 3 or is_parametric:
         if is_parametric: print("Plotting: 3D classification plot not supported for parametric models.")
@@ -174,12 +189,20 @@ def plot_classification_3d(sisso_instance, X, y, save_path=None):
     
     for i, c in enumerate(sisso_instance.classes_):
         class_points = X_desc[y == c]
-        ax.scatter(class_points.iloc[:, 0], class_points.iloc[:, 1], class_points.iloc[:, 2],
-                   color=colors(i), label=f'Class {c}', s=30, alpha=0.7, edgecolors='k')
+        ax.scatter(class_points.iloc[:, 0], class_points.iloc[:, 1], 
+                   class_points.iloc[:, 2],
+                   color=colors(i), label=f'Class {c}', s=30, alpha=0.7, 
+                   edgecolors='k')
     
-    desc_f1 = print_descriptor_formula([sisso_instance.best_descriptor_[0]], None, sisso_instance.task_type_, True, clean_to_original_map=sisso_instance.sym_clean_to_original_map_).split("=")[-1].strip()
-    desc_f2 = print_descriptor_formula([sisso_instance.best_descriptor_[1]], None, sisso_instance.task_type_, True, clean_to_original_map=sisso_instance.sym_clean_to_original_map_).split("=")[-1].strip()
-    desc_f3 = print_descriptor_formula([sisso_instance.best_descriptor_[2]], None, sisso_instance.task_type_, True, clean_to_original_map=sisso_instance.sym_clean_to_original_map_).split("=")[-1].strip()
+    desc_f1 = print_descriptor_formula([sisso_instance.best_descriptor_[0]], 
+                    None, sisso_instance.task_type_, True, 
+                    clean_to_original_map=sisso_instance.sym_clean_to_original_map_).split("=")[-1].strip()
+    desc_f2 = print_descriptor_formula([sisso_instance.best_descriptor_[1]], 
+                    None, sisso_instance.task_type_, True, 
+                    clean_to_original_map=sisso_instance.sym_clean_to_original_map_).split("=")[-1].strip()
+    desc_f3 = print_descriptor_formula([sisso_instance.best_descriptor_[2]], 
+                    None, sisso_instance.task_type_, True, 
+                    clean_to_original_map=sisso_instance.sym_clean_to_original_map_).split("=")[-1].strip()
     
     ax.set_xlabel(f"D1: {desc_f1[:20]}..", fontsize=9)
     ax.set_ylabel(f"D2: {desc_f2[:20]}..", fontsize=9)
@@ -191,7 +214,6 @@ def plot_classification_3d(sisso_instance, X, y, save_path=None):
     return fig
 
 def plot_descriptor_pairplot(sisso_instance, X, y, save_path=None):
-    """Generates a pairplot of the final descriptors using seaborn."""
     is_parametric = hasattr(sisso_instance.best_model_, 'is_parametric') and sisso_instance.best_model_.is_parametric
     if sisso_instance.best_model_ is None or sisso_instance.best_D_ < 2 or not SEABORN_AVAILABLE or is_parametric:
         if is_parametric: print("Plotting: Descriptor pairplot not applicable for parametric models.")
@@ -200,9 +222,9 @@ def plot_descriptor_pairplot(sisso_instance, X, y, save_path=None):
     X_desc = sisso_instance._transform_X(X)
     df_plot = X_desc.copy()
     
-    # Use original feature expressions for column names for clarity
     model_info = sisso_instance.models_by_dim_[sisso_instance.best_D_]
-    pretty_names = [print_descriptor_formula([f], None, 'regression', True, clean_to_original_map=sisso_instance.sym_clean_to_original_map_).split("=")[-1].strip() for f in model_info['sym_features']]
+    pretty_names = [print_descriptor_formula([f], None, 'regression', True, 
+                        clean_to_original_map=sisso_instance.sym_clean_to_original_map_).split("=")[-1].strip() for f in model_info['sym_features']]
     df_plot.columns = pretty_names
     
     df_plot['target'] = y.values
@@ -217,7 +239,6 @@ def plot_descriptor_pairplot(sisso_instance, X, y, save_path=None):
     return pair_grid.fig
 
 def plot_descriptor_histograms(sisso_instance, X, save_path=None):
-    """Plots histograms of the values for each final descriptor."""
     is_parametric = hasattr(sisso_instance.best_model_, 'is_parametric') and sisso_instance.best_model_.is_parametric
     if sisso_instance.best_model_ is None or is_parametric:
         if is_parametric: print("Plotting: Descriptor histograms not applicable for parametric models.")
@@ -240,10 +261,7 @@ def plot_descriptor_histograms(sisso_instance, X, save_path=None):
     if save_path: plt.savefig(save_path); plt.close(fig)
     return fig
 
-# --- : Advanced Interpretation Plots ---
-
 def plot_feature_importance(sisso_instance, X, ax=None, save_path=None):
-    """: Plots the scaled importance of each descriptor in the final linear model."""
     model_info = sisso_instance.models_by_dim_.get(sisso_instance.best_D_)
     if not model_info or 'coef' not in model_info or model_info['coef'] is None:
         print("Plotting: Feature importance plot requires a final linear model with coefficients.")
@@ -257,9 +275,9 @@ def plot_feature_importance(sisso_instance, X, ax=None, save_path=None):
     X_desc = sisso_instance._transform_X(X)
     coefs = model_info['coef'].flatten()
     if not sisso_instance.fix_intercept_:
-        coefs = coefs[1:] # remove intercept
+        coefs = coefs[1:] 
 
-    # Importance = |coefficient| * std(descriptor value)
+    # importance = |coefficient| * std(descriptor value)
     importances = np.abs(coefs) * X_desc.std().values
     
     feat_names = [print_descriptor_formula([f], None, 'regression', True, clean_to_original_map=sisso_instance.sym_clean_to_original_map_).split("=")[-1].strip() for f in model_info['sym_features']]
@@ -277,7 +295,6 @@ def plot_feature_importance(sisso_instance, X, ax=None, save_path=None):
     return fig
 
 def plot_partial_dependence(sisso_instance, X, features_to_plot=None, ax=None, save_path=None, resolution=50):
-    """: Creates a Partial Dependence Plot (PDP) to visualize model response."""
     if sisso_instance.best_model_ is None: return None
     is_parametric = hasattr(sisso_instance.best_model_, 'is_parametric') and sisso_instance.best_model_.is_parametric
     if is_parametric:
@@ -287,7 +304,6 @@ def plot_partial_dependence(sisso_instance, X, features_to_plot=None, ax=None, s
     X_desc = sisso_instance._transform_X(X)
     
     if features_to_plot is None:
-        # Default to first one or two descriptors based on what is available
         features_to_plot = sisso_instance.models_by_dim_[sisso_instance.best_D_]['features'][:2]
     if isinstance(features_to_plot, str):
         features_to_plot = [features_to_plot]
@@ -304,11 +320,9 @@ def plot_partial_dependence(sisso_instance, X, features_to_plot=None, ax=None, s
         own_fig = True
     else: fig = ax.figure; own_fig = False
 
-    # Create a grid and a background dataset with mean values
     grid_data = pd.DataFrame(np.array([np.linspace(c.min(), c.max(), num=resolution) for c in X_desc.T]).T, columns=X_desc.columns)
     background_data = X_desc.mean().to_frame().T
     
-    # Get pretty names for labels
     all_pretty_names_map = {feat_name: print_descriptor_formula([sym_feat], None, 'regression', True, clean_to_original_map=sisso_instance.sym_clean_to_original_map_).split("=")[-1].strip() 
                            for feat_name, sym_feat in zip(sisso_instance.models_by_dim_[sisso_instance.best_D_]['features'], sisso_instance.best_descriptor_)}
 
@@ -344,10 +358,7 @@ def plot_partial_dependence(sisso_instance, X, features_to_plot=None, ax=None, s
     if save_path: plt.savefig(save_path); plt.close(fig)
     return fig
 
-# Output / Reporting
-
 def save_results(sisso_instance, X, y, sample_weight):
-    """Saves all model results, data, and plots to the specified work directory."""
     workdir = sisso_instance.workdir
     print(f"\nSaving results to '{workdir}'...")
     p_workdir = Path(workdir)
@@ -366,8 +377,10 @@ def save_results(sisso_instance, X, y, sample_weight):
 
     print("  - Generating and saving plots...")
     try:
-        plot_cv_results(sisso_instance.cv_results_, sisso_instance.best_D_, sisso_instance.task_type_, sisso_instance.loss, sisso_instance.selection_method, save_path=p_plots / "selection_scores.png")
-        # ... (rest of plotting calls are fine) ...
+        plot_cv_results(sisso_instance.cv_results_, sisso_instance.best_D_, 
+                        sisso_instance.task_type_, sisso_instance.loss, 
+                        sisso_instance.selection_method, 
+                        save_path=p_plots / "selection_scores.png")
     except Exception as e:
         warnings.warn(f"Error during plotting: {e}")
 
@@ -400,10 +413,13 @@ def save_results(sisso_instance, X, y, sample_weight):
                 header = "Coefs..." if sisso_instance.fix_intercept_ else "Intercept, Coefs..."
                 if 'coef_stderr' in model_data:
                     header += " (standard errors on next line)"
-                    np.savetxt(f, model_data['coef'], fmt="%.8f", header=header, comments="# ")
-                    np.savetxt(f, model_data['coef_stderr'].reshape(1,-1), fmt="%.8f", comments="# ")
+                    np.savetxt(f, model_data['coef'], fmt="%.8f", header=header, 
+                               comments="# ")
+                    np.savetxt(f, model_data['coef_stderr'].reshape(1,-1), fmt="%.8f", 
+                               comments="# ")
                 else:
-                    np.savetxt(f, model_data['coef'], fmt="%.8f", header=header, comments="# ")
+                    np.savetxt(f, model_data['coef'], fmt="%.8f", header=header, 
+                               comments="# ")
             
             if 'orthogonal_model_formula' in model_data:
                  f.write(f"\n# ORTHOGONALIZED MODEL: y = {model_data['orthogonal_model_formula']}\n")
@@ -431,7 +447,6 @@ def save_results(sisso_instance, X, y, sample_weight):
 
 
 def sympy_to_s_expression(expr):
-    """Converts a SymPy expression to a Lisp-style S-expression string."""
     if isinstance(expr, (sympy.Symbol, sympy.Number)):
         return str(expr)
     if expr is None: return "None"
@@ -448,13 +463,13 @@ def sympy_to_s_expression(expr):
     return f"({s_op} {' '.join(args)})"
 
 
-def print_descriptor_formula(descriptor_features, coefficients, task_type, fix_intercept,
-                             target_name='y', s_expr_format=False, latex_format=False, pretty_format=False, 
-                             model_provider=None, coefficients_stderr=None, clean_to_original_map=None):
-    """
-    Formats and prints the symbolic formula for a given model.
-    Includes pretty-printing for publication-ready text.
-    """
+def print_descriptor_formula(descriptor_features, coefficients, task_type, 
+                             fix_intercept,
+                             target_name='y', s_expr_format=False, latex_format=False,
+                             pretty_format=False, 
+                             model_provider=None, coefficients_stderr=None, 
+                             clean_to_original_map=None):
+
     is_parametric = hasattr(model_provider, 'is_parametric') and model_provider.is_parametric
     
     temp_descriptor_features = descriptor_features
@@ -464,15 +479,16 @@ def print_descriptor_formula(descriptor_features, coefficients, task_type, fix_i
         else:
             temp_descriptor_features = [f.subs(clean_to_original_map) for f in descriptor_features]
 
-    # Handle different output formats
     if pretty_format:
-        formatter = lambda expr: sympy.pretty(expr, use_unicode=False, full_prec=False).replace('\n', '')
+        formatter = lambda expr: sympy.pretty(expr, use_unicode=False, 
+                                              full_prec=False).replace('\n', '')
     elif latex_format:
         formatter = sympy.latex
     elif s_expr_format:
         if is_parametric: return sympy_to_s_expression(temp_sym_expr)
         if task_type in ALL_CLASSIFICATION_TASKS:
-            return "\n".join([f"# D{i+1}: {sympy_to_s_expression(feat)}" for i, feat in enumerate(temp_descriptor_features)])
+            return "\n".join([f"# D{i+1}: {sympy_to_s_expression(feat)}" for i, 
+                              feat in enumerate(temp_descriptor_features)])
         
         if coefficients is None:
             formulas = [sympy_to_s_expression(feat) for feat in temp_descriptor_features]
@@ -488,13 +504,13 @@ def print_descriptor_formula(descriptor_features, coefficients, task_type, fix_i
                 formula += sympy.Number(float(coefs_t[0]))
                 coef_offset = 1
             if temp_descriptor_features:
-                formula += sum(sympy.Number(float(coefs_t[coef_offset + i])) * f for i, f in enumerate(temp_descriptor_features))
+                formula += sum(sympy.Number(float(coefs_t[coef_offset + i])) * f for i, 
+                               f in enumerate(temp_descriptor_features))
             formulas.append(sympy_to_s_expression(formula))
         return "\n".join(formulas)
-    else: # Default: verbose pretty print
+    else: 
         formatter = lambda expr: sympy.pretty(expr, use_unicode=True)
 
-    # Logic for pretty text and LaTeX
     header = "=" * 60
     output = [] if (latex_format or pretty_format) else [f"\n{header}\nFinal Symbolic Model: {task_type}\n{header}"]
     
@@ -518,7 +534,8 @@ def print_descriptor_formula(descriptor_features, coefficients, task_type, fix_i
             return "\n".join(output)
 
         is_multitask = coefficients.ndim > 1 and coefficients.shape[0] > 1
-        target_names = target_name if is_multitask and isinstance(target_name, list) else [target_name]
+        target_names = target_name if is_multitask and isinstance(target_name, 
+                                                                list) else [target_name]
         num_tasks = coefficients.shape[0] if is_multitask else 1
         
         for t_idx in range(num_tasks):
@@ -533,7 +550,6 @@ def print_descriptor_formula(descriptor_features, coefficients, task_type, fix_i
                 full_model_expr += sympy.Number(float(coefs_t[i + coef_offset])) * feature
 
             
-            # Round the coefficients for cleaner output
             if pretty_format or latex_format:
                  rounded_expr = full_model_expr.xreplace({n: round(n, 4) for n in full_model_expr.atoms(sympy.Number)})
             else:

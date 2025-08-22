@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 This module defines global constants used across the DISCOVER package to ensure
 consistency and avoid magic strings.

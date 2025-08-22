@@ -1,4 +1,5 @@
-
+# Author: Uday Gajera
+# Date: 21st August 2025
 """
 This module contains all functions related to model evaluation, screening, and
 cross-validation. It includes:
@@ -68,10 +69,9 @@ def run_SIS(phi, y, task_type, xp=np, multitask_sis_method='average', phi_tensor
             y_np = y.to_numpy() if isinstance(y, pd.Series) else np.asarray(y)
 
             if xp == torch:
-                # For PyTorch, get the dtype from the tensor and convert numpy array directly
-                y_gpu = torch.from_numpy(y_np).to(device=phi_gpu.device, dtype=phi_gpu.dtype)
-            else: # cupy
-                # For CuPy, we can use the .name attribute as before
+                y_gpu = torch.from_numpy(y_np).to(device=phi_gpu.device, 
+                                                  dtype=phi_gpu.dtype)
+            else: 
                 y_gpu = cp.asarray(y_np, dtype=phi_gpu.dtype.name)
 
             if y_gpu.ndim > 1: y_gpu = y_gpu.squeeze()
@@ -102,7 +102,8 @@ def run_SIS(phi, y, task_type, xp=np, multitask_sis_method='average', phi_tensor
             return correlations.dropna().sort_values(ascending=False)
         except Exception as e:
             warnings.warn(f"GPU-based SIS failed: {e}. Falling back to CPU-based SIS.")
-            cpu_values = phi_tensor.cpu().numpy() if TORCH_AVAILABLE and isinstance(phi_tensor, torch.Tensor) else cp.asnumpy(phi_tensor)
+            cpu_values = phi_tensor.cpu().numpy() if TORCH_AVAILABLE and isinstance(phi_tensor, 
+                                                        torch.Tensor) else cp.asnumpy(phi_tensor)
             phi_df = pd.DataFrame(cpu_values, columns=phi_names, index=y.index)
 
     # CPU path (also serves as the fallback path for a failed GPU run)
@@ -123,12 +124,14 @@ def run_SIS(phi, y, task_type, xp=np, multitask_sis_method='average', phi_tensor
             if len(non_constant_cols) == 0: return pd.Series([], dtype=float)
             phi_subset = phi_df[non_constant_cols]
             f_values, _ = f_classif(phi_subset, y)
-            correlations = pd.Series(f_values, index=phi_subset.columns).fillna(0).sort_values(ascending=False)
+            correlations = pd.Series(f_values, 
+                                index=phi_subset.columns).fillna(0).sort_values(ascending=False)
          except ValueError as e:
              warnings.warn(f"SIS f_classif failed: {e}. Returning empty list."); return pd.Series([], dtype=float)
 
     elif task_type == MULTITASK:
-        y_df = y if isinstance(y, pd.DataFrame) else pd.DataFrame(y, index=phi_df.index)
+        y_df = y if isinstance(y, pd.DataFrame) else pd.DataFrame(y, 
+                                                                  index=phi_df.index)
 
         if multitask_sis_method == 'cca':
             print("  Using Canonical Correlation Analysis (CCA) for multi-task screening.")
@@ -154,14 +157,14 @@ def run_SIS(phi, y, task_type, xp=np, multitask_sis_method='average', phi_tensor
 
 
 def regression_score(X, y, model_params, sample_weight=None):
-     """Scores a regression model using Ridge or Huber loss on the CPU."""
      try:
         loss = model_params.get('loss', 'l2')
         fit_intercept = model_params.get('fit_intercept', True)
         if loss == 'l2':
             model = Ridge(alpha=model_params.get('alpha', 1e-6), fit_intercept=fit_intercept)
         elif loss == 'huber':
-            model = HuberRegressor(alpha=model_params.get('alpha', 1e-6), epsilon=1.35, fit_intercept=fit_intercept)
+            model = HuberRegressor(alpha=model_params.get('alpha', 1e-6), 
+                                   epsilon=1.35, fit_intercept=fit_intercept)
         else: raise ValueError(f"Unknown loss function: {loss}")
 
         model.fit(X, y, sample_weight=sample_weight)
@@ -175,7 +178,6 @@ def regression_score(X, y, model_params, sample_weight=None):
      except (np.linalg.LinAlgError, ValueError): return float('inf'), None
 
 class GPUModel:
-    """A minimal model-like object to store coefficients from GPU calculations."""
     def __init__(self, c, i, dev, xp_mod, fit_intercept=True):
         self.coef_ = c
         self.intercept_ = i
@@ -197,7 +199,6 @@ class GPUModel:
         return pred
 
 def _cuda_ridge_score(X_gpu, y_gpu, alpha, fit_intercept, sample_weight_gpu=None):
-    """Performs Ridge regression directly on a CUDA GPU using CuPy."""
     try:
         y_orig = y_gpu.copy()
         X_orig = X_gpu.copy()
@@ -236,7 +237,7 @@ def _cuda_ridge_score(X_gpu, y_gpu, alpha, fit_intercept, sample_weight_gpu=None
     except cp.linalg.LinAlgError: return float('inf'), None
 
 def _mps_ridge_score(X_mps, y_mps, alpha, fit_intercept, sample_weight_mps=None):
-    """Performs Ridge regression directly on an Apple Silicon GPU using PyTorch/MPS."""
+    """for device='mps' ridge regression using pytorch"""
     try:
         y_orig = y_mps.clone()
         X_orig = X_mps.clone()
@@ -276,7 +277,6 @@ def _mps_ridge_score(X_mps, y_mps, alpha, fit_intercept, sample_weight_mps=None)
 
 
 def multitask_score(X, Y_df, model_params, sample_weight=None):
-    """Scores a multi-target regression model by averaging RSS over all tasks."""
     total_rss, coefs_list, intercepts_list, models = 0, [], [], {}
     n_tasks = len(Y_df.columns)
     if n_tasks == 0: return float('inf'), None
@@ -302,7 +302,6 @@ def multitask_score(X, Y_df, model_params, sample_weight=None):
     return total_rss / n_tasks , {'model': models, 'coef': coef}
 
 def ch_overlap_score(X, y, model_params, sample_weight=None, n_mc_points=1500):
-    """Scores a classification by the geometric overlap of class convex hulls."""
     X_np = X.values if isinstance(X, pd.DataFrame) else X
     y_np = y.values if isinstance(y, (pd.Series, pd.DataFrame)) else y
     classes = np.unique(y_np)
@@ -313,19 +312,24 @@ def ch_overlap_score(X, y, model_params, sample_weight=None, n_mc_points=1500):
         for c in classes:
             points = X_np[y_np == c]
             points_dict[c] = points
-            if len(points) < min_points_for_hull or np.all(np.ptp(points, axis=0) < 1e-9): return float('inf'), None
+            if len(points) < min_points_for_hull or np.all(np.ptp(points, 
+                                            axis=0) < 1e-9): return float('inf'), None
             try: hulls[c] = ConvexHull(points)
             except qhull.QhullError: return float('inf'), None
     except (ValueError): return float('inf'), None
 
     min_bounds, max_bounds = X_np.min(axis=0), X_np.max(axis=0)
     padding = (max_bounds - min_bounds) * 0.05
-    mc_points = np.random.uniform(min_bounds-padding, max_bounds+padding, size=(n_mc_points, X_np.shape[1]))
+    mc_points = np.random.uniform(min_bounds-padding, 
+                                  max_bounds+padding, size=(n_mc_points, 
+                                                            X_np.shape[1]))
     in_hull_counts = np.zeros(n_mc_points, dtype=int)
     total_points_in_any_hull = 0
     for hull in hulls.values():
         try:
-           is_inside = np.all(np.add(np.dot(mc_points, hull.equations[:, :-1].T), hull.equations[:, -1]) <= 1e-9, axis=1)
+           is_inside = np.all(np.add(np.dot(mc_points, 
+                                            hull.equations[:, :-1].T), 
+                                            hull.equations[:, -1]) <= 1e-9, axis=1)
            in_hull_counts += is_inside
            total_points_in_any_hull += np.sum(is_inside)
         except ValueError: return float('inf'), None
@@ -339,19 +343,22 @@ def ch_overlap_score(X, y, model_params, sample_weight=None, n_mc_points=1500):
     return overlap_fraction, {'model': hulls, 'coef': None}
 
 def classification_score(X, y, task_type, model_params, sample_weight=None):
-      """Scores a classification model (SVM or Logistic Regression) using log-loss."""
       try:
           fit_intercept = model_params.get('fit_intercept', True)
           if task_type == CLASSIFICATION_SVM:
-               model = SVC(C=model_params.get('C_svm', 1.0), probability=True, gamma='scale', kernel='rbf')
+               model = SVC(C=model_params.get('C_svm', 1.0), 
+                           probability=True, gamma='scale', kernel='rbf')
           elif task_type == CLASSIFICATION_LOGREG:
-               model = LogisticRegression(C=model_params.get('C_logreg', 1.0), solver='liblinear', multi_class='ovr', fit_intercept=fit_intercept)
+               model = LogisticRegression(C=model_params.get('C_logreg', 1.0), 
+                                          solver='liblinear', multi_class='ovr', 
+                                          fit_intercept=fit_intercept)
           else: return float('inf'), None
           if len(np.unique(y)) < 2: return float('inf'), None
 
           model.fit(X, y, sample_weight=sample_weight)
           proba = model.predict_proba(X)
-          score = log_loss(y, proba, sample_weight=sample_weight, labels=model.classes_)
+          score = log_loss(y, proba, sample_weight=sample_weight, 
+                           labels=model.classes_)
           return score, {'model': model, 'coef': None}
       except (ValueError, np.linalg.LinAlgError): return float('inf'), None
 
@@ -359,18 +366,20 @@ SCORE_FUNCTIONS = {
     REGRESSION: regression_score,
     MULTITASK: multitask_score,
     CH_CLASSIFICATION: ch_overlap_score,
-    CLASSIFICATION_SVM: lambda X, y, p, sw: classification_score(X, y, CLASSIFICATION_SVM, p, sw),
-    CLASSIFICATION_LOGREG: lambda X, y, p, sw: classification_score(X, y, CLASSIFICATION_LOGREG, p, sw),
+    CLASSIFICATION_SVM: lambda X, y, p, sw: classification_score(X, y, 
+                                                CLASSIFICATION_SVM, p, sw),
+    CLASSIFICATION_LOGREG: lambda X, y, p, sw: classification_score(X, y, 
+                                                CLASSIFICATION_LOGREG, p, sw),
 }
 
 
 #  Main L0 Search and Cross-Validation
 
 
-def _score_single_model(X_combo_df, y, task_type, model_params, sample_weight, device, torch_device):
+def _score_single_model(X_combo_df, y, task_type, model_params, sample_weight, 
+                        device, torch_device):
     """
-    Scores a single combination of features, dispatching to the correct
-    CPU or GPU implementation based on the task and device settings.
+    gpu and cpu scoring on single score.
     """
     X_combo_values = X_combo_df.values
     is_reg_task = task_type == REGRESSION and model_params.get('loss') != 'huber'
@@ -381,16 +390,20 @@ def _score_single_model(X_combo_df, y, task_type, model_params, sample_weight, d
     if device == 'cuda' and is_reg_task and CUPY_AVAILABLE:
         X_gpu = cp.asarray(X_combo_values, dtype=dtype)
         y_gpu = cp.asarray(y, dtype=dtype)
-        sw_gpu = cp.asarray(sample_weight, dtype=dtype) if sample_weight is not None else None
-        score, model_data = _cuda_ridge_score(X_gpu, y_gpu, alpha, fit_intercept, sw_gpu)
+        sw_gpu = cp.asarray(sample_weight, 
+                            dtype=dtype) if sample_weight is not None else None
+        score, model_data = _cuda_ridge_score(X_gpu, y_gpu, 
+                                              alpha, fit_intercept, sw_gpu)
         if cp: cp.get_default_memory_pool().free_all_blocks()
     elif device == 'mps' and is_reg_task and TORCH_AVAILABLE:
         torch_dtype = torch.float32 if dtype == np.float32 else torch.float64
         X_mps = torch.from_numpy(X_combo_values).to(torch_device, dtype=torch_dtype)
         y_mps_np = y.to_numpy() if isinstance(y, pd.Series) else y
         y_mps = torch.from_numpy(y_mps_np).to(torch_device, dtype=torch_dtype)
-        sw_mps = torch.from_numpy(sample_weight).to(torch_device, dtype=torch_dtype) if sample_weight is not None else None
-        score, model_data = _mps_ridge_score(X_mps, y_mps, alpha, fit_intercept, sw_mps)
+        sw_mps = torch.from_numpy(sample_weight).to(torch_device, 
+                            dtype=torch_dtype) if sample_weight is not None else None
+        score, model_data = _mps_ridge_score(X_mps, y_mps, alpha, 
+                                             fit_intercept, sw_mps)
     else:
         score_func = SCORE_FUNCTIONS[task_type]
         score, model_data = score_func(X_combo_df, y, model_params, sample_weight)
@@ -404,7 +417,9 @@ def _run_cv(X_features, y, cv_splitter, task_type, model_params, sample_weight):
     """Runs a full cross-validation loop for a given set of features."""
     scores = []
     score_func = SCORE_FUNCTIONS[task_type]
-    sw_series = pd.Series(sample_weight, index=y.index) if sample_weight is not None and not isinstance(sample_weight, pd.DataFrame) else sample_weight
+    sw_series = pd.Series(sample_weight, 
+                    index=y.index) if sample_weight is not None and not isinstance(sample_weight, 
+                                                pd.DataFrame) else sample_weight
 
     for train_idx, val_idx in cv_splitter.split(X_features, y):
          X_train, X_val = X_features.iloc[train_idx], X_features.iloc[val_idx]
@@ -412,8 +427,10 @@ def _run_cv(X_features, y, cv_splitter, task_type, model_params, sample_weight):
          y_val = y.iloc[val_idx] if hasattr(y, 'iloc') else y[val_idx]
 
          if sw_series is not None:
-             sw_train = sw_series.iloc[train_idx].values if isinstance(sw_series, pd.Series) else sw_series.iloc[train_idx]
-             sw_val = sw_series.iloc[val_idx].values if isinstance(sw_series, pd.Series) else sw_series.iloc[val_idx]
+             sw_train = sw_series.iloc[train_idx].values if isinstance(sw_series, 
+                                            pd.Series) else sw_series.iloc[train_idx]
+             sw_val = sw_series.iloc[val_idx].values if isinstance(sw_series, 
+                                            pd.Series) else sw_series.iloc[val_idx]
          else:
              sw_train, sw_val = None, None
 
@@ -430,12 +447,14 @@ def _run_cv(X_features, y, cv_splitter, task_type, model_params, sample_weight):
             val_score = float('inf')
             if task_type == REGRESSION:
                  y_pred = model_data['model'].predict(X_val)
-                 val_score = np.sqrt(mean_squared_error(y_val, y_pred, sample_weight=sw_val))
+                 val_score = np.sqrt(mean_squared_error(y_val, y_pred, 
+                                                        sample_weight=sw_val))
             elif task_type == MULTITASK:
                   total_rss_val = 0
                   for task_col, model in model_data['model'].items():
                         y_pred = model.predict(X_val)
-                        sw_val_task = sw_val[task_col] if sw_val is not None and isinstance(sw_val, pd.DataFrame) else sw_val
+                        sw_val_task = sw_val[task_col] if sw_val is not None and isinstance(sw_val, 
+                                                            pd.DataFrame) else sw_val
                         rss = np.sum(((y_val[task_col] - y_pred)**2) * (sw_val_task if sw_val_task is not None else 1))
                         total_rss_val += rss / (np.sum(sw_val_task) if sw_val_task is not None else len(y_val))
                   val_score = total_rss_val / len(model_data['model'])
@@ -444,15 +463,20 @@ def _run_cv(X_features, y, cv_splitter, task_type, model_params, sample_weight):
             elif task_type in [CLASSIFICATION_SVM, CLASSIFICATION_LOGREG]:
                  try:
                     proba_val = model_data['model'].predict_proba(X_val)
-                    val_score = log_loss(y_val, proba_val, labels=model_data['model'].classes_, sample_weight=sw_val)
+                    val_score = log_loss(y_val, proba_val, 
+                                    labels=model_data['model'].classes_, 
+                                    sample_weight=sw_val)
                  except ValueError: val_score = float('inf')
             scores.append(val_score)
          except Exception: scores.append(float('inf'))
 
     valid_scores = [s for s in scores if np.isfinite(s)]
-    return (np.mean(valid_scores), np.std(valid_scores)) if valid_scores else (float('inf'), float('inf'))
+    return (np.mean(valid_scores), 
+            np.std(valid_scores)) if valid_scores else (float('inf'), 
+                                                        float('inf'))
 
-def _refit_and_score_final_model(indices, X_data, y_true, task_type, model_params, sample_weight, device, torch_device, feature_names):
+def _refit_and_score_final_model(indices, X_data, y_true, task_type, model_params, 
+                                 sample_weight, device, torch_device, feature_names):
     """
     Helper function for SISSO++ to refit the best feature combination with the
     actual model and scoring function for the task.
@@ -461,7 +485,8 @@ def _refit_and_score_final_model(indices, X_data, y_true, task_type, model_param
     X_combo_df = pd.DataFrame(X_data[:, indices], columns=combo_names)
 
     score, model_data = _score_single_model(
-        X_combo_df, y_true, task_type, model_params, sample_weight, device, torch_device
+        X_combo_df, y_true, task_type, model_params, 
+        sample_weight, device, torch_device
     )
 
     if model_data:
