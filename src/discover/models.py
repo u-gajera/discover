@@ -496,7 +496,12 @@ class DiscoverBase(BaseEstimator):
                          print(f"    Parametric model: using training score {model_data['score']:.4g} for evaluation.")
                          continue
                     
-                    X_d = self.feature_space_df_[model_data['features']]
+                    # --- THIS IS THE CORRECT LOCATION FOR THE FIX ---
+                    # The list of features from the search can have mixed string types.
+                    # We sanitize it here before creating the DataFrame for CV.
+                    sanitized_features = [str(f) for f in model_data['features']]
+                    X_d = self.feature_space_df_[sanitized_features]
+
                     mean_score, std_score = _run_cv(X_d, y_s, cv_splitter, 
                                     self.task_type_, self.model_params_, sample_weight)
                     if np.isfinite(mean_score): self.cv_results_[D] = (mean_score, std_score)

@@ -157,7 +157,8 @@ def run_SIS(phi, y, task_type, xp=np, multitask_sis_method='average', phi_tensor
 
 
 def regression_score(X, y, model_params, sample_weight=None):
-     try:
+    try:
+        X.columns = X.columns.astype(str)
         loss = model_params.get('loss', 'l2')
         fit_intercept = model_params.get('fit_intercept', True)
         if loss == 'l2':
@@ -175,7 +176,8 @@ def regression_score(X, y, model_params, sample_weight=None):
         else:
             coef = model.coef_.reshape(1, -1)
         return score, {'model': model, 'coef': coef}
-     except (np.linalg.LinAlgError, ValueError): return float('inf'), None
+    except (np.linalg.LinAlgError, ValueError): 
+        return float('inf'), None
 
 class GPUModel:
     def __init__(self, c, i, dev, xp_mod, fit_intercept=True):
@@ -277,6 +279,7 @@ def _mps_ridge_score(X_mps, y_mps, alpha, fit_intercept, sample_weight_mps=None)
 
 
 def multitask_score(X, Y_df, model_params, sample_weight=None):
+    X.columns = X.columns.astype(str)
     total_rss, coefs_list, intercepts_list, models = 0, [], [], {}
     n_tasks = len(Y_df.columns)
     if n_tasks == 0: return float('inf'), None
@@ -302,6 +305,7 @@ def multitask_score(X, Y_df, model_params, sample_weight=None):
     return total_rss / n_tasks , {'model': models, 'coef': coef}
 
 def ch_overlap_score(X, y, model_params, sample_weight=None, n_mc_points=1500):
+    X.columns = X.columns.astype(str)
     X_np = X.values if isinstance(X, pd.DataFrame) else X
     y_np = y.values if isinstance(y, (pd.Series, pd.DataFrame)) else y
     classes = np.unique(y_np)
@@ -344,6 +348,7 @@ def ch_overlap_score(X, y, model_params, sample_weight=None, n_mc_points=1500):
 
 def classification_score(X, y, task_type, model_params, sample_weight=None):
       try:
+          X.columns = X.columns.astype(str)
           fit_intercept = model_params.get('fit_intercept', True)
           if task_type == CLASSIFICATION_SVM:
                model = SVC(C=model_params.get('C_svm', 1.0), 
@@ -381,37 +386,54 @@ def _score_single_model(X_combo_df, y, task_type, model_params, sample_weight,
     """
     gpu and cpu scoring on single score.
     """
-    X_combo_values = X_combo_df.values
-    is_reg_task = task_type == REGRESSION and model_params.get('loss') != 'huber'
-    fit_intercept = model_params.get('fit_intercept', True)
-    alpha = model_params.get('alpha', 1e-5)
-    dtype = np.dtype(model_params.get('dtype', 'float64')).type
+    try:
+        X_combo_df.columns = X_combo_df.columns.astype(str)
+        
+        X_combo_values = X_combo_df.values
+        is_reg_task = task_type == REGRESSION and model_params.get('loss') != 'huber'
+        fit_intercept = model_params.get('fit_intercept', True)
+        alpha = model_params.get('alpha', 1e-5)
+        dtype = np.dtype(model_params.get('dtype', 'float64')).type
 
-    if device == 'cuda' and is_reg_task and CUPY_AVAILABLE:
-        X_gpu = cp.asarray(X_combo_values, dtype=dtype)
-        y_gpu = cp.asarray(y, dtype=dtype)
-        sw_gpu = cp.asarray(sample_weight, 
-                            dtype=dtype) if sample_weight is not None else None
-        score, model_data = _cuda_ridge_score(X_gpu, y_gpu, 
-                                              alpha, fit_intercept, sw_gpu)
-        if cp: cp.get_default_memory_pool().free_all_blocks()
-    elif device == 'mps' and is_reg_task and TORCH_AVAILABLE:
-        torch_dtype = torch.float32 if dtype == np.float32 else torch.float64
-        X_mps = torch.from_numpy(X_combo_values).to(torch_device, dtype=torch_dtype)
-        y_mps_np = y.to_numpy() if isinstance(y, pd.Series) else y
-        y_mps = torch.from_numpy(y_mps_np).to(torch_device, dtype=torch_dtype)
-        sw_mps = torch.from_numpy(sample_weight).to(torch_device, 
-                            dtype=torch_dtype) if sample_weight is not None else None
-        score, model_data = _mps_ridge_score(X_mps, y_mps, alpha, 
-                                             fit_intercept, sw_mps)
-    else:
-        score_func = SCORE_FUNCTIONS[task_type]
-        score, model_data = score_func(X_combo_df, y, model_params, sample_weight)
+        if device == 'cuda' and is_reg_task and CUPY_AVAILABLE:
+            X_gpu = cp.asarray(X_combo_values, dtype=dtype)
+            y_gpu = cp.asarray(y, dtype=dtype)
+            sw_gpu = cp.asarray(sample_weight, 
+                                dtype=dtype) if sample_weight is not None else None
+            score, model_data = _cuda_ridge_score(X_gpu, y_gpu, 
+                                                  alpha, fit_intercept, sw_gpu)
+            if cp: cp.get_default_memory_pool().free_all_blocks()
+        elif device == 'mps' and is_reg_task and TORCH_AVAILABLE:
+            torch_dtype = torch.float32 if dtype == np.float32 else torch.float64
+            X_mps = torch.from_numpy(X_combo_values).to(torch_device, dtype=torch_dtype)
+            y_mps_np = y.to_numpy() if isinstance(y, pd.Series) else y
+            y_mps = torch.from_numpy(y_mps_np).to(torch_device, dtype=torch_dtype)
+            sw_mps = torch.from_numpy(sample_weight).to(torch_device, 
+                                dtype=torch_dtype) if sample_weight is not None else None
+            score, model_data = _mps_ridge_score(X_mps, y_mps, alpha, 
+                                                 fit_intercept, sw_mps)
+        else:
+            score_func = SCORE_FUNCTIONS[task_type]
+            score, model_data = score_func(X_combo_df, y, model_params, sample_weight)
 
-    if model_data is not None and np.isfinite(score):
-        return score, model_data
-    else:
-        return float('inf'), None
+        if model_data is not None and np.isfinite(score):
+            return score, model_data
+        else:
+            return float('inf'), None
+            
+    except TypeError as e:
+        if 'Feature names are only supported' in str(e):
+            print("\n" + "!"*25 + " FATAL ERROR CAUGHT IN SCORING " + "!"*25)
+            print("! The following feature combination caused a TypeError in scikit-learn.")
+            print("! This means one or more feature names are not standard Python strings.")
+            print("! Please check the feature names and types below:")
+            print("!"*80)
+            print("Offending DataFrame columns in _score_single_model:")
+            for c in X_combo_df.columns:
+                print(f"  - Column: {repr(c)}, Type: {type(c)}")
+            print("!"*80 + "\n")
+        raise e
+
 
 def _run_cv(X_features, y, cv_splitter, task_type, model_params, sample_weight):
     scores = []

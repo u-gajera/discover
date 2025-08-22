@@ -105,6 +105,7 @@ def _prune_by_correlation(phi_df, threshold):
     if threshold >= 1.0:
         return phi_df
     print(f"  Pruning feature space with correlation threshold > {threshold}...")
+    phi_df.columns = phi_df.columns.astype(str)
     corr_matrix = phi_df.corr().abs()
     
     keep = []
@@ -226,7 +227,8 @@ def _find_best_models_sa(sisso_instance, phi_sis_df, y, D_max, task_type,
         init_attempts = 0
         max_init_attempts = 1000 
         while not np.isfinite(current_score) and init_attempts < max_init_attempts:
-            candidate_features = list(rng.choice(all_features, size=D, replace=False))
+            candidate_features = [str(f) for f in rng.choice(all_features, 
+                                                             size=D, replace=False)]
             score, _ = _score_single_model(phi_pruned[candidate_features], y, 
                                            task_type, model_params, sample_weight, 
                                            device, torch_device)
@@ -250,12 +252,11 @@ def _find_best_models_sa(sisso_instance, phi_sis_df, y, D_max, task_type,
             if len(current_features_list) >= n_total_features:
                 break
             current_features_set = set(current_features_list)
-            
-            feature_to_remove = rng.choice(current_features_list)
+            feature_to_remove = str(rng.choice(current_features_list))
             
             while True:
-                feature_to_add = rng.choice(all_features)
-                if feature_to_add not in current_features_set: # Fast O(1) check
+                feature_to_add = str(rng.choice(all_features))
+                if feature_to_add not in current_features_set: 
                     break
             
             new_features = [f for f in current_features_list if f != feature_to_remove] + [feature_to_add]
@@ -325,7 +326,7 @@ def _find_best_models_rmhc(sisso_instance, phi_sis_df, y, X_df, D_max, task_type
         print(f"\n--- RMHC: Refining Dimension {D} ({iterations} iterations x {restarts} restarts) ---")
         
         initial_model = models_by_dim[D]
-        best_features_for_D = initial_model['features']
+        best_features_for_D = [str(f) for f in initial_model['features']]
         best_score_for_D = initial_model['score']
         
         print(f"  Initial greedy score for D={D}: {best_score_for_D:.6g}")
@@ -336,12 +337,12 @@ def _find_best_models_rmhc(sisso_instance, phi_sis_df, y, X_df, D_max, task_type
 
             for i in range(iterations):
                 if len(current_features) == 0: continue
+                feature_to_remove = str(rng.choice(current_features))
                 
-                feature_to_remove = rng.choice(current_features)
                 candidate_pool = [f for f in all_features if f not in current_features]
                 if not candidate_pool: continue
+                feature_to_add = str(rng.choice(candidate_pool))
                 
-                feature_to_add = rng.choice(candidate_pool)
                 mutated_combo = [f for f in current_features if f != feature_to_remove] + [feature_to_add]
                 
                 score, model_data = _score_single_model(phi_pruned[mutated_combo], 
@@ -401,7 +402,7 @@ def _find_best_models_omp(sisso_instance, phi_sis_df, y, D_max, task_type,
             print("  No more features to select. Stopping."); break
 
         correlations = candidate_features_df.corrwith(residual).abs()
-        best_new_feature = correlations.idxmax()
+        best_new_feature = str(correlations.idxmax())
         
         selected_features.append(best_new_feature)
         candidate_features_df.drop(columns=[best_new_feature], inplace=True)
@@ -693,13 +694,14 @@ def _find_best_models_greedy(sisso_instance, phi_sis_df, y, X_df, D_max, task_ty
         print(f"  SIS screening on residual complete. Top candidates:")
         top_features_data = []
         for i in range(min(5, len(sorted_candidates_series))):
-            feat_name = sorted_candidates_series.index[i]
+            feat_name = str(sorted_candidates_series.index[i])
             sis_score = sorted_candidates_series.iloc[i]
             formula = _format_feature_str(sisso_instance, feat_name)
             
             rmse_on_residual = np.nan
             try:
-                X_feat = features_to_screen_df[[feat_name]].values
+                X_feat = features_to_screen_df[[feat_name]]
+                X_feat.columns = X_feat.columns.astype(str)
                 model = LinearRegression().fit(X_feat, current_target)
                 y_pred_residual = model.predict(X_feat)
                 rmse_on_residual = np.sqrt(mean_squared_error(current_target, 
@@ -711,17 +713,15 @@ def _find_best_models_greedy(sisso_instance, phi_sis_df, y, X_df, D_max, task_ty
         
         if top_features_data:
             max_formula_len = max(len(f) for _, _, _, f in top_features_data) if top_features_data else 0
-            # Header
             rank_w, sis_w, rmse_w = 5, 11, 15
             header = f"    {'Rank':<{rank_w}} | {'SIS Score':<{sis_w}} | {'RMSE (on res.)':<{rmse_w}} | Formula"
             separator = f"    {'-'*rank_w}-+-{'-'*sis_w}-+-{'-'*rmse_w}-+-{'-'*max(7, max_formula_len)}"
             print(header)
             print(separator)
-            # Rows
             for rank, sis_score, rmse, formula in top_features_data:
                 print(f"    {rank:<{rank_w}} | {sis_score:<{sis_w}.4f} | {rmse:<{rmse_w}.4f} | {formula}")
 
-        best_new_feature = sorted_candidates_series.index[0]
+        best_new_feature = str(sorted_candidates_series.index[0])
         selected_features.append(best_new_feature)
         formula_str = _format_feature_str(sisso_instance, best_new_feature)
         print(f"  Selected feature for D={D_iter}: '{formula_str}'")
