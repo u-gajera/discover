@@ -1,9 +1,12 @@
 """
-Plot best model for each descriptor dimension: python plot_results.py discover_output train.csv
+Plot best model for each descriptor dimension:
+    python plot_results.py --config config_manuel.json
 
-Plot top N SIS candidates (univariate regressions): python plot_results.py discover_output train.csv --mode sis --top 3
+Plot top N SIS candidates (univariate regressions):
+    python plot_results.py --config config_manuel.json --mode sis --top 3
 
-Plot the DISCOVER model for a specific dimension: python plot_results.py discover_output train.csv --mode discover --dimension 2
+Plot the DISCOVER model for a specific dimension:
+    python plot_results.py --config config_manuel.json --mode discover --dimension 2
 """
 
 from __future__ import annotations
@@ -21,16 +24,18 @@ import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score, mean_squared_error
 
-# -----------------------------------------------------------------------------
-# I/O helpers
-# -----------------------------------------------------------------------------
-
 def _read_json(path: Path):
     if not path.is_file():
         raise FileNotFoundError(f"Required file not found: {path}")
     with path.open('r') as f:
         return json.load(f)
 
+def _read_config_json(path: Path):
+    if not path.is_file():
+        raise FileNotFoundError(f"Config file not found: {path}")
+    with path.open('r') as f:
+        lines = [line for line in f if not line.strip().startswith('//')]
+        return json.loads("".join(lines))
 
 def _load_data(data_path: Path, property_key: str) -> Tuple[pd.DataFrame, pd.Series]:
     if not data_path.is_file():
@@ -47,24 +52,11 @@ def _load_data(data_path: Path, property_key: str) -> Tuple[pd.DataFrame, pd.Ser
     Xdf = df.drop(columns=[property_key])
     return Xdf, y
 
-
-# -----------------------------------------------------------------------------
-# SymPy expression handling
-# -----------------------------------------------------------------------------
-
 def _sym_from_srepr_str(srepr_str: str) -> sp.Expr:
-    """Return a SymPy expression from an srepr string."""
     return sp.sympify(srepr_str)
 
 
 def _substitute_clean_symbols(expr: sp.Expr, clean_to_orig: Dict[str, str]) -> sp.Expr:
-    """Replace clean symbols in *expr* with their original feature names.
-
-    ``clean_to_orig`` maps clean -> original. For any symbol whose name matches a
-    key in that mapping, we substitute a new Symbol with the *original* name.
-    This yields expressions that can be evaluated against the column names in the
-    user-supplied DataFrame.
-    """
     repl = {}
     for s in expr.free_symbols:
         name = s.name
@@ -76,20 +68,13 @@ def _substitute_clean_symbols(expr: sp.Expr, clean_to_orig: Dict[str, str]) -> s
 
 
 def _evaluate_descriptor(exprs: Sequence[sp.Expr], Xdf: pd.DataFrame) -> np.ndarray:
-    """Evaluate a sequence of SymPy expressions on a DataFrame of raw features.
 
-    Returns an ``(n_samples, n_exprs)`` numpy array.
-    """
-    # Collect all symbols across expressions
     syms = sorted({s for e in exprs for s in e.free_symbols}, key=lambda s: s.name)
-    # Validate presence in DataFrame
     missing = [s.name for s in syms if s.name not in Xdf.columns]
     if missing:
         raise KeyError(f"Missing required feature columns: {missing}")
-    # Build lambdified function
     func = sp.lambdify([sp.Symbol(s.name) for s in syms], 
                        exprs, modules={'real': np, 'Abs': np.abs, 'sqrt': np.sqrt})
-    # Evaluate
     vals = func(*[Xdf[s.name].values for s in syms])
     arr = np.vstack(vals) if len(exprs) > 1 else np.array(vals)
     if arr.ndim == 2 and arr.shape[0] == len(exprs):
@@ -98,19 +83,13 @@ def _evaluate_descriptor(exprs: Sequence[sp.Expr], Xdf: pd.DataFrame) -> np.ndar
         arr = arr.reshape(-1, 1)
     return np.asarray(arr, dtype=float)
 
-
-# -----------------------------------------------------------------------------
-# Formula formatting helpers
-
 def _fmt_num(x: float, digits: int = 4) -> str:
-    """Nicely format a float for inclusion in a formula string."""
     if abs(x) >= 1e4 or (abs(x) > 0 and abs(x) < 1e-3):
         return f"{x:.{digits}e}"
     return f"{x:.{digits}g}"
 
 
 def _wrap_text(s: str, width: int = 60) -> str:
-    """Insert newlines so matplotlib titles don't get too wide."""
     if len(s) <= width:
         return s
     out = []
@@ -140,7 +119,6 @@ def _linear_formula_string(exprs: Sequence[sp.Expr], coefs: Sequence[float],
     parts: List[str] = []
     for c, e in zip(coefs, exprs):
         c_str = _fmt_num(c)
-        # add parentheses around multi-symbol expressions to avoid ambiguity
         e_str = str(e)
         if isinstance(e, sp.Symbol):
             term = f"{c_str}*{e_str}"
@@ -164,11 +142,6 @@ def _univariate_formula_string(c: float, intercept: float, feat_name: str,
         term = f"{term} {sign} {_fmt_num(abs(intercept))}"
     return _wrap_text(f"{y_name} = {term}")
 
-
-# -----------------------------------------------------------------------------
-# Prediction utilities
-# -----------------------------------------------------------------------------
-
 def _parse_coef_vector(coefs: Sequence[float], D: int, 
                        fix_intercept: bool) -> Tuple[float, np.ndarray]:
     """Return (intercept, coef_vector) from stored coefficients.
@@ -180,18 +153,12 @@ def _parse_coef_vector(coefs: Sequence[float], D: int,
     coefs = np.asarray(coefs, dtype=float)
     if not fix_intercept and coefs.size == D + 1:
         return float(coefs[0]), coefs[1:]
-    # Fallback – assume no intercept
     return 0.0, coefs[:D]
 
 
 def _predict_linear(descriptor: np.ndarray, intercept: float, 
                     coefs: np.ndarray) -> np.ndarray:
     return intercept + np.dot(descriptor, coefs)
-
-
-# -----------------------------------------------------------------------------
-# Plotting
-# -----------------------------------------------------------------------------
 
 def _parity_plot(y_true: pd.Series, y_pred: np.ndarray, title: str, ax=None):
     if ax is None:
@@ -209,11 +176,6 @@ def _parity_plot(y_true: pd.Series, y_pred: np.ndarray, title: str, ax=None):
     rmse = np.sqrt(mean_squared_error(y_true, y_pred))
     ax.set_title(f"{title}\nR²={r2:.3f}, RMSE={rmse:.3g}")
     return fig, ax
-
-
-# -----------------------------------------------------------------------------
-# Mode implementations
-# -----------------------------------------------------------------------------
 
 def _mode_best_allD(workdir: Path, Xdf: pd.DataFrame, y: pd.Series, 
                     show: bool, write_individual: bool, y_name: str = 'y'):
@@ -256,7 +218,6 @@ def _mode_best_allD(workdir: Path, Xdf: pd.DataFrame, y: pd.Series,
             fig_i.tight_layout(); fig_i.savefig(out_path, dpi=300)
             plt.close(fig_i)
 
-    # Hide any unused axes
     for j in range(len(plottable), len(axes.flat)):
         axes.flat[j].set_visible(False)
 
@@ -270,7 +231,7 @@ def _mode_best_allD(workdir: Path, Xdf: pd.DataFrame, y: pd.Series,
     print(f"Saved: {out_all}")
 
 
-def _mode_sis_topN(workdir: Path, data_path: Path, Xdf: pd.DataFrame, 
+def _mode_sis_topN(workdir: Path, Xdf: pd.DataFrame, 
                    y: pd.Series, top: int, show: bool, 
                    write_individual: bool, y_name: str = 'y'):
     sis_path = workdir / 'top_sis_candidates.csv'
@@ -278,7 +239,6 @@ def _mode_sis_topN(workdir: Path, data_path: Path, Xdf: pd.DataFrame,
         raise FileNotFoundError(f"SIS candidates file not found: {sis_path}")
 
     sis_df = pd.read_csv(sis_path)
-    # Expect a column containing feature names. Try common ones.
     feature_col = None
     for cand in ['Feature', 'feature', 'symbol', 'name', 'descriptor']:
         if cand in sis_df.columns:
@@ -296,7 +256,6 @@ def _mode_sis_topN(workdir: Path, data_path: Path, Xdf: pd.DataFrame,
     for ax, (_, row) in zip(axes.flat, top_df.iterrows()):
         feat_name = row[feature_col]
         if feat_name not in Xdf.columns:
-            # Try to recover via symbol map
             symmap_path = workdir / 'symbol_map.json'
             if symmap_path.is_file():
                 clean_to_orig = _read_json(symmap_path)
@@ -308,7 +267,6 @@ def _mode_sis_topN(workdir: Path, data_path: Path, Xdf: pd.DataFrame,
             ax.set_visible(False)
             continue
         x = Xdf[feat_name].values.reshape(-1,1)
-        # Fit univariate linear regression with intercept
         lr = LinearRegression(fit_intercept=True)
         lr.fit(x, y.values)
         y_pred = lr.predict(x)
@@ -374,43 +332,63 @@ def _mode_discover_D(workdir: Path, Xdf: pd.DataFrame, y: pd.Series,
     print(f"Saved: {out_path}")
 
 
-# -----------------------------------------------------------------------------
-# Main CLI
-
 def main(argv: Optional[Sequence[str]] = None):
-    parser = argparse.ArgumentParser(description="Plot results from a DISCOVER run.")
-    parser.add_argument('workdir', help="Working directory produced by run_discover.py")
-    parser.add_argument('data_file', help="Training data CSV used in the DISCOVER run")
-    parser.add_argument('--mode', choices=['best','sis','discover'], default='best', help="Plotting mode. See script header.")
-    parser.add_argument('--top', type=int, default=3, help="Top N SIS candidates to plot (mode sis).")
-    parser.add_argument('--dimension','-D', type=int, default=None, help="Descriptor dimension to plot (mode discover).")
-    parser.add_argument('-y','--property-key', default='property', help="Name of target column in data file.")
-    parser.add_argument('--show', action='store_true', help="Display figures interactively in addition to saving.")
-    parser.add_argument('--no-individual', action='store_true', help="Skip writing individual PNGs (only combined figure).")
+    parser = argparse.ArgumentParser(description="Plot results from a DISCOVER run using a config file.")
+    
+    parser.add_argument('--config', type=str, required=True, 
+                        help="Path to the JSON configuration file used in the DISCOVER run.")
+    
+    parser.add_argument('--mode', choices=['best','sis','discover'], default='best', 
+                        help="Plotting mode. 'best': all dimensions, 'sis': top candidates, 'discover': one dimension. Default: 'best'.")
+    parser.add_argument('--top', type=int, default=3, 
+                        help="Top N SIS candidates to plot (for --mode sis). Default: 3.")
+    parser.add_argument('--dimension','-D', type=int, default=None, 
+                        help="Descriptor dimension to plot (for --mode discover).")
+    parser.add_argument('-y','--property-key', default=None, 
+                        help="Name of target column in data file. Overrides value from config file.")
+    parser.add_argument('--show', action='store_true', 
+                        help="Display figures interactively in addition to saving.")
+    parser.add_argument('--no-individual', action='store_true', 
+                        help="Skip writing individual PNGs (only combined figure).")
 
     args = parser.parse_args(argv)
 
-    workdir = Path(args.workdir).expanduser().resolve()
-    data_path = Path(args.data_file).expanduser().resolve()
+    config_path = Path(args.config).expanduser().resolve()
+    config = _read_config_json(config_path)
+
+    workdir_str = config.get('workdir')
+    if not workdir_str:
+        parser.error("The 'workdir' key is missing from the config file.")
+    
+    data_file_str = config.get('data_file')
+    if not data_file_str:
+        parser.error("The 'data_file' key is missing from the config file.")
+
+    resolved_property_key = args.property_key or config.get('property_key')
+    if not resolved_property_key:
+        parser.error("The 'property_key' must be specified either in the config file or with the --property-key argument.")
+
+    workdir = Path(workdir_str).expanduser().resolve()
+    data_path = Path(data_file_str).expanduser().resolve()
 
     if not workdir.is_dir():
-        raise NotADirectoryError(f"Workdir not found: {workdir}")
+        raise NotADirectoryError(f"Workdir specified in config not found: {workdir}")
 
-    Xdf, y = _load_data(data_path, args.property_key)
+    Xdf, y = _load_data(data_path, resolved_property_key)
 
     write_individual = not args.no_individual
 
     if args.mode == 'best':
-        _mode_best_allD(workdir, Xdf, y, show=args.show, write_individual=write_individual, y_name=args.property_key)
+        _mode_best_allD(workdir, Xdf, y, show=args.show, write_individual=write_individual, y_name=resolved_property_key)
     elif args.mode == 'sis':
-        _mode_sis_topN(workdir, data_path, Xdf, y, top=args.top, show=args.show, write_individual=write_individual, y_name=args.property_key)
+        _mode_sis_topN(workdir, Xdf, y, top=args.top, show=args.show, write_individual=write_individual, y_name=resolved_property_key)
     elif args.mode == 'discover':
         if args.dimension is None:
             parser.error("--mode discover requires --dimension")
-        _mode_discover_D(workdir, Xdf, y, D_req=args.dimension, show=args.show, write_individual=write_individual, y_name=args.property_key)
+        _mode_discover_D(workdir, Xdf, y, D_req=args.dimension, show=args.show, write_individual=write_individual, y_name=resolved_property_key)
     else:
-        raise RuntimeError("Unhandled mode")
+        raise RuntimeError(f"Unhandled mode: {args.mode}")
 
 
-if __name__ == '__main__':  # pragma: no cover
+if __name__ == '__main__':  
     main()
