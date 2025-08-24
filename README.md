@@ -154,7 +154,7 @@ python plot_results.py <workdir> <data_file>
 **Example:**
 
 ```bash
-python plot_results.py discover_output train.csv "
+python plot_results.py --config <config.json file> "
 ```
 
 This saves `parity_best_allD.png` in the `discover_output` directory.
@@ -163,7 +163,7 @@ This saves `parity_best_allD.png` in the `discover_output` directory.
 Generate a parity plot for a specific model dimension (`-D`).
 
 ```bash
-python plot_results.py <workdir> <data_file>  --mode discover -D 2
+python plot_results.py --config <config.json file> --mode discover --dimension 2
 ```
 
 This command will generate a plot for the 2-dimensional model and save it as `parity_discover_D2.png`.
@@ -172,7 +172,7 @@ This command will generate a plot for the 2-dimensional model and save it as `pa
 Analyze the performance of the best individual features (1D models) found by Sure Independence Screening.
 
 ```bash
-python plot_results.py <workdir> <data_file>  --mode sis --top 3
+python plot_results.py --config <config.json file> --mode sis --top 3
 ```
 
 This command plots the top 6 features and saves the figure as `parity_sis_top6.png`.
