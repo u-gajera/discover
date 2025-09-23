@@ -43,6 +43,7 @@ CUSTOM_UNARY_OP_DEFS = {
         'name_func': lambda n: f"tanh({n})",
     }
 }
+```
 
 #### Adding a Custom Binary Operator
 
@@ -76,7 +77,7 @@ CUSTOM_BINARY_OP_DEFS = {
 3.  The function must have the following signature:
     ```python
 def _find_best_models_new_strategy(sisso_instance, phi_sis_df, y, D_max, task_type, max_feat_cross_corr, sample_weight, device, torch_device, **kwargs):
-```
+    ```
 4.  The function needs to return a dictionary with keys as dimensions (e.g., `1`, `2`, `3`) and values as dictionaries of the model info for that dimension. The model info dictionary should have:
     -   `features`: List of feature names (strings).
     -   `score`: The model's training score.
@@ -89,7 +90,7 @@ def _find_best_models_new_strategy(sisso_instance, phi_sis_df, y, D_max, task_ty
     # In discover/models.py in the fit method
     elif self.search_strategy == 'new_strategy':
         search_results = _find_best_models_new_strategy(**search_args)
-```
+    ```
 
 ### Coding Style and Conventions
 

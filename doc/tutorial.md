@@ -37,8 +37,7 @@ cd discover-project
     *   **For Unit-Awareness:**
         ```bash
         pip install pint
-```
-``` 
+        ```
 
 ### Step 2: Prepare Your Data
 
@@ -46,11 +45,11 @@ DISCOVER expects your data in a single **CSV file**.
 -   Each row should be an example (e.g., a material or a data point).
 -   Each column should be a primary feature or the target property.
 
-For our case, `manuel_data.csv` contains columns for main features like `R_A` (ionic radius), `ELN_A` (electronegativity), and target property `E_a` (migration barrier).
+For our case, `sample_dataset.csv` contains columns for main features like `R_A` (ionic radius), `ELN_A` (electronegativity), and target property `E_a` (migration barrier).
 
 ### Step 3: Prepare the Analysis
 
-The workflow is managed by `config_manuel.json`. Let's break down the critical parts for an initial run.
+The workflow is managed by `config.json`. Let's break down the critical parts for an initial run.
 
 ```json
 {
@@ -100,7 +99,7 @@ The workflow is managed by `config_manuel.json`. Let's break down the critical p
 With your configuration set, execute the `run_discover.py` script in your command line:
 
 ```bash
-python run_discover.py config_manuel.json
+python run_discover.py config.json
 ```
 
 DISCOVER will start, giving live output on how it's proceeding:
@@ -154,117 +153,3 @@ For exploring more sophisticated features, check out our **[How-To Guides](./how
 -   Employ GPU acceleration for massive speed improvements.
 -   Employ sophisticated search strategies and operators.
 -   Classify tasks.
-
-### `doc/contribution.md`
-
-```markdown
-# Contributing to DISCOVER
-
-Thank you for your interest in writing for DISCOVER! We welcome contributions that introduce new functionality, fix bugs, or improve documentation. This handbook should provide a good starting point.
-
-### Code Structure Overview
-
-The project is divided into several key modules:
-
--   `run_discover.py`: The level-zero command-line entry point.
--   `discover/models.py`: The central `DiscoverBase` class that executes the workflow.
--   `discover/features.py`: Contains all feature space generation functionality and the `UFeature` unit-aware class.
--   `discover/search.py`: Determines the different search methods (greedy, SISSO++, MIQP).
--   `discover/scoring.py`: Contains model evaluation functions (SIS, CV, regression/classification scores) and GPU-supported kernels.
--   `discover/utils.py`: Contains utility functions for plotting, result saving, and formula formatting.
--   `discover/constants.py`: Contains global constants (task types, etc.).
-
-### Adding a New Mathematical Operator
-
-Adding a custom operator is one of the easiest expansions for DISCOVER. Operators are defined in `discover/features.py`.
-
-#### Adding a Custom Unary Operator
-
-1.  Open `discover/features.py`.
-2.  Navigate to the `CUSTOM_UNARY_OP_DEFS` dictionary.
-3.  Add a new entry with a unique name.
-
-The entry should be a dictionary with the following keys:
--   `func`: The mathematical function (e.g., `lambda x: np.tanh(x)`).
--   `sym_func`: Symbolic variant with `sympy` (e.g., `lambda s: sympy.tanh(s)`).
--   `unit_check` (optional): Function returning `True` if the input unit is acceptable. For example, `lambda u: u.dimensionless` for trig functions.
--   `domain_check` (optional): Function returning `True` if input values are acceptable (e.g., `lambda f: np.all(f.values > 0)` for `log`).
--   `name_func`: A function that produces the string name of the new feature (e.g., `lambda n: f"tanh({n})"`).
-
-**Adding a `tanh` operator**
-```python
-# In discover/features.py
-CUSTOM_UNARY_OP_DEFS = {
-    #. other operators
-    'tanh': {
-        'func': np.tanh,
-        'sym_func': lambda s: sympy.tanh(s),"}
-```
-'unit_check': lambda u: u.dimensionless,
-        'domain_check': None,
-        'name_func': lambda n: f"tanh({n})",
-    }
-}
-```
-
-#### Adding a Custom Binary Operator
-
-1.  Open `discover/features.py`.
-2.  Navigate to the `CUSTOM_BINARY_OP_DEFS` dictionary.
-3.  Add a new entry.
-
-The structure is similar to unary operators but takes two arguments.
-
-**Example: Adding a `geometric_mean` operator**
-```python
-# In discover/features.py
-CUSTOM_BINARY_OP_DEFS = {
-    #. other operators
-    'geometric_mean': {
-        'func': lambda f1, f2: np.sqrt(f1 * f2),
-        'sym_func': lambda s1, s2: sympy.sqrt(s1 * s2),
-        'unit_op': lambda u1, u2: u1**0.5 * u2**0.5,
-}}}
-'unit_check': None, # Or a check for compatible units
-        'domain_check': lambda f1, f2: np.all(f1.values >= 0) and np.all(f2.values >= 0),
-        'op_name': "<G>"
-    }
-}
-```
-
-### Adding a New Search Strategy
-
-1.  Open `discover/search.py`.
-2.  Create a new function, typically prefixed with `_find_best_models_`. For an example, study `_find_best_models_greedy`.
-3.  The new function should look like the following:
-    ```python
-def _find_best_models_new_strategy(sisso_instance, phi_sis_df, y, D_max, task_type, max_feat_cross_corr, sample_weight, device, torch_device, **kwargs):
-    ```
-4.  The function ought to return a dictionary with the keys being dimensions (e.g., `1`, `2`, `3`) and values being dictionaries containing the model information for each dimension. The dictionary containing model information ought to contain:
-    -   `features`: A list of feature names (strings).
-    -   `score`: Training score of the model.
--   `model`: The fitted model object (e.g., scikit-learn model).
-    -   `coef`: The coefficients of the model (where it is applicable).
-    -   `sym_features`: List of `sympy` expressions for features.
-    -   `is_parametric`: Boolean (`False` for standard linear models).
-5.  Open `discover/models.py`, locate the `fit` method within the `DiscoverBase` class, and include your new search strategy within the `if/elif` block that invokes the search functions.
-    ```python
-    # In discover/models.py in the fit method
-    elif self.search_strategy == 'new_strategy':
-        search_results = _find_best_models_new_strategy(**search_args)
-    ```
-
-### Coding Style and Conventions
-
--   **PEP 8:** Adhere to the PEP 8 Python coding style guide.
--   **Docstrings:** Provide brief, clear docstrings for modules, classes, and functions that explain their function, arguments, and return type.
--   **Type Hinting:** We suggest using type hints to make code more readable and maintainable.
--   **Readability:** Make the code readable and understandable. Add comments wherever the logic becomes too complicated.
-
-### Making Changes
-
-1.  **Fork the repository** on GitHub.
-2.  **Create a new branch** for your feature or bugfix: `git checkout -b feature/my-new-operator`.
-3.  **Make your changes** and commit them with a good commit message.
-4.  **Push your branch** to your fork: `git push origin feature/my-new-operator`.
-5.  **Submit a Pull Request** to the master repository, explaining the changes you did.
