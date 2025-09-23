@@ -1,25 +1,25 @@
 # Getting Started: A Step-by-Step Tutorial
 
-This tutorial will guide you through your first analysis using DISCOVER. We will go through installation, data preparation, configuration, execution, and interpretation of the output. We will take `config_manuel.json` as an example.
+This tutorial will guide you through your first analysis using DISCOVER. We will go through installation, data preparation, configuration, execution, and interpretation of the output. We will take `config.json` as an example.
 
 ### Step 1: Installation
 
 Ensure you have Python 3.8+ installed. It is strongly advised to use a virtual environment.
 
 1.  **Clone the Repository:**
-    ```bash
+```bash
 git clone <your-repository-url>
 cd discover-project
 ```
 
 2.  **Activate a Virtual Environment:**
-    ```bash
+```bash
     python -m venv venv
     source venv/bin/activate  # On Windows, use `venv\\\\Scripts\\\\activate`
-    ```
+```
 
 3.  **Install Core Dependencies:**
-    ```bash
+```bash
     pip install pandas numpy sympy scikit-learn matplotlib seaborn joblib
 ```
 
