@@ -76,7 +76,7 @@ CUSTOM_BINARY_OP_DEFS = {
 2.  Define a new function, typically with `_find_best_models_` prepended to its name. As an example, study `_find_best_models_greedy`.
 3.  The function must have the following signature:
     ```python
-def _find_best_models_new_strategy(sisso_instance, phi_sis_df, y, D_max, task_type, max_feat_cross_corr, sample_weight, device, torch_device, **kwargs):
+    def _find_best_models_new_strategy(sisso_instance, phi_sis_df, y, D_max, task_type, max_feat_cross_corr, sample_weight, device, torch_device, **kwargs):
     ```
 4.  The function needs to return a dictionary with keys as dimensions (e.g., `1`, `2`, `3`) and values as dictionaries of the model info for that dimension. The model info dictionary should have:
     -   `features`: List of feature names (strings).
