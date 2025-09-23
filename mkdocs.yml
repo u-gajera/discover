@@ -10,7 +10,7 @@ repo_name: 'discover'
 # Theme configuration
 theme:
   name: material
-  logo: images/discover_logo.png 
+  logo: discover_logo_1.png 
   features:
     - navigation.tabs
     - navigation.sections
