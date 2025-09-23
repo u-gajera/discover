@@ -1,0 +1,24 @@
+# Project information
+site_name: DISCOVER Documentation
+site_description: 'Symbolic Regression for Science'
+site_author: 'Your Name / Your Team'
+
+# Repository
+repo_url: https://github.com/u-gajera/discover
+repo_name: 'discover'
+
+# Theme configuration
+theme:
+  name: material
+  logo: src/discover_logo_1.png 
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+
+# Navigation structure
+nav:
+  - 'Home': 'index.md'
+  - 'Getting Started': 'tutorial.md'
+  - 'How-To Guides': 'howto.md'
+  - 'Contributing': 'contribution.md'
