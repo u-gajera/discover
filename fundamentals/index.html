@@ -1110,19 +1110,17 @@
 <p>OMP is a smarter, more robust version of the greedy algorithm. Instead of just adding a new feature, it <strong>recalculates the coefficients for all selected features</strong> at each step.</p>
 <ol>
 <li>Initialize the residual <span class="arithmatex">\(\mathbf{r}_0 = \mathbf{y}\)</span> and an empty feature set <span class="arithmatex">\(\mathcal{S}_0 = \emptyset\)</span>.</li>
-<li>For each step <span class="arithmatex">\(k\)</span> from 1 to <span class="arithmatex">\(D\)</span>:<ol>
-<li>Find the feature <span class="arithmatex">\(\Phi_k^*\)</span> that's most correlated with the current residual <span class="arithmatex">\(\mathbf{r}_{k-1}\)</span>.
-    $$
-    \Phi_k^* = \underset{\Phi_j \notin \mathcal{S}<em>{k-1}}{\text{argmax}} \left| \langle \mathbf{r}</em>{k-1}, \Phi_j \rangle \right|
-    $$</li>
-<li>Add this feature to the active set: <span class="arithmatex">\(\mathcal{S}_k = \mathcal{S}_{k-1} \cup \{\Phi_k^*\}\)</span>.</li>
-<li>Solve a new least-squares problem using all features in the current set <span class="arithmatex">\(\mathcal{S}_k\)</span> to get updated coefficients <span class="arithmatex">\(\beta_k\)</span>.
-    $$
-    \beta_k = \Phi_{\mathcal{S}_k}^\dagger \mathbf{y} \quad \text{(least-squares solution / pseudo-inverse)}
-    $$</li>
-<li>Update the residual for the next iteration: <span class="arithmatex">\(\mathbf{r}_k = \mathbf{y} - \Phi_{\mathcal{S}_k} \beta_k\)</span>.</li>
-</ol>
-</li>
+<li>For each step <span class="arithmatex">\(k\)</span> from 1 to <span class="arithmatex">\(D\)</span>:
+    a.  Find the feature <span class="arithmatex">\(\Phi_k^*\)</span> that's most correlated with the current residual <span class="arithmatex">\(\mathbf{r}_{k-1}\)</span>.
+        $$
+        \Phi_k^* = \underset{\Phi_j \notin \mathcal{S}<em>{k-1}}{\text{argmax}} \left| \langle \mathbf{r}</em>{k-1}, \Phi_j \rangle \right|
+        $$
+    b.  Add this feature to the active set: <span class="arithmatex">\(\mathcal{S}_k = \mathcal{S}_{k-1} \cup \{\Phi_k^*\}\)</span>.
+    c.  Solve a new least-squares problem using all features in the current set <span class="arithmatex">\(\mathcal{S}_k\)</span> to get updated coefficients <span class="arithmatex">\(\beta_k\)</span>.
+        $$
+        \beta_k = \Phi_{\mathcal{S}_k}^\dagger \mathbf{y} \quad \text{(least-squares solution / pseudo-inverse)}
+        $$
+    d.  Update the residual for the next iteration: <span class="arithmatex">\(\mathbf{r}_k = \mathbf{y} - \Phi_{\mathcal{S}_k} \beta_k\)</span>.</li>
 </ol>
 <h4 id="application-in-symbolic-regression_2">Application in Symbolic Regression<a class="headerlink" href="#application-in-symbolic-regression_2" title="Permanent link">&para;</a></h4>
 <p>OMP provides a more stable solution than a simple greedy search. By re-fitting the entire model at each step, it better handles correlations between symbolic features, often leading to a more physically meaningful final equation.</p>
