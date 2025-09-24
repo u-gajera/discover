@@ -1,7 +1,7 @@
 # Project information
 site_name: DISCOVER Documentation
 site_description: 'Symbolic Regression for Science'
-site_author: 'Uday Gajera, Mohsen Sotoudeh'
+site_author: 'Your Name / Your Team'
 
 # Repository
 repo_url: https://github.com/u-gajera/discover
@@ -33,3 +33,7 @@ markdown_extensions:
   - pymdownx.superfences
   - toc:
       permalink: true
+
+extra_javascript:
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
