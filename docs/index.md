@@ -38,4 +38,4 @@ This implementation is designed for **ease of use, extensibility, and performanc
   - Read the **[Contribution Guidelines](./contribution.md)** to learn how to add new features and operators.
 
 - **Would you like to learn fundamentals?**
-  - Read the **[Fundamentals](./fundamental.md)** to learn how to add new features and operators.
+  - Read the **[Fundamentals](./fundamentals.md)** to learn how to add new features and operators.
