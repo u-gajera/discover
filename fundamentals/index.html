@@ -473,7 +473,7 @@
         <li class="md-nav__item">
   <a href="#the-core-problem-l_0-regularized-regression" class="md-nav__link">
     <span class="md-ellipsis">
-      The Core Problem: \(L_0\)-Regularized Regression 💡
+      The Core Problem: \(L_0\)-Regularized Regression
     </span>
   </a>
   
@@ -482,11 +482,11 @@
         <li class="md-nav__item">
   <a href="#search-algorithms-the-sparsifying-operator" class="md-nav__link">
     <span class="md-ellipsis">
-      Search Algorithms: The Sparsifying Operator ⚙️
+      Search Algorithms: The Sparsifying Operator
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Search Algorithms: The Sparsifying Operator ⚙️">
+    <nav class="md-nav" aria-label="Search Algorithms: The Sparsifying Operator">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -728,7 +728,7 @@
         <li class="md-nav__item">
   <a href="#post-search-non-linear-refinement" class="md-nav__link">
     <span class="md-ellipsis">
-      Post-Search: Non-Linear Refinement 📈
+      Post-Search: Non-Linear Refinement
     </span>
   </a>
   
@@ -780,7 +780,7 @@
         <li class="md-nav__item">
   <a href="#the-core-problem-l_0-regularized-regression" class="md-nav__link">
     <span class="md-ellipsis">
-      The Core Problem: \(L_0\)-Regularized Regression 💡
+      The Core Problem: \(L_0\)-Regularized Regression
     </span>
   </a>
   
@@ -789,11 +789,11 @@
         <li class="md-nav__item">
   <a href="#search-algorithms-the-sparsifying-operator" class="md-nav__link">
     <span class="md-ellipsis">
-      Search Algorithms: The Sparsifying Operator ⚙️
+      Search Algorithms: The Sparsifying Operator
     </span>
   </a>
   
-    <nav class="md-nav" aria-label="Search Algorithms: The Sparsifying Operator ⚙️">
+    <nav class="md-nav" aria-label="Search Algorithms: The Sparsifying Operator">
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
@@ -1035,7 +1035,7 @@
         <li class="md-nav__item">
   <a href="#post-search-non-linear-refinement" class="md-nav__link">
     <span class="md-ellipsis">
-      Post-Search: Non-Linear Refinement 📈
+      Post-Search: Non-Linear Refinement
     </span>
   </a>
   
@@ -1064,12 +1064,12 @@
 <h1 id="discover-a-gpu-accelerated-symbolic-regression-algorithm"><strong>DISCOVER: A GPU-Accelerated Symbolic Regression Algorithm</strong><a class="headerlink" href="#discover-a-gpu-accelerated-symbolic-regression-algorithm" title="Permanent link">&para;</a></h1>
 <h3 id="physics-informed-scientific-discovery-with-flexible-feature-constraints">Physics-Informed Scientific Discovery with Flexible Feature Constraints<a class="headerlink" href="#physics-informed-scientific-discovery-with-flexible-feature-constraints" title="Permanent link">&para;</a></h3>
 <hr />
-<h2 id="the-core-problem-l_0-regularized-regression">The Core Problem: <span class="arithmatex">\(L_0\)</span>-Regularized Regression 💡<a class="headerlink" href="#the-core-problem-l_0-regularized-regression" title="Permanent link">&para;</a></h2>
+<h2 id="the-core-problem-l_0-regularized-regression">The Core Problem: <span class="arithmatex">\(L_0\)</span>-Regularized Regression<a class="headerlink" href="#the-core-problem-l_0-regularized-regression" title="Permanent link">&para;</a></h2>
 <p>All search methods in DISCOVER aim to solve the same fundamental problem. Given a large set of <span class="arithmatex">\(M\)</span> candidate symbolic features <span class="arithmatex">\(\Phi = \{\Phi_1, \Phi_2, \dots, \Phi_M\}\)</span> and a target property <span class="arithmatex">\(\mathbf{y}\)</span>, our goal is to find a simple linear model—using at most <span class="arithmatex">\(D\)</span> features—that best predicts the target. This is known as the <strong><span class="arithmatex">\(L_0\)</span>-norm regularized least-squares problem</strong>:</p>
 <div class="arithmatex">\[\min_{\beta} \left\| \mathbf{y} - \Phi \beta \right\|_2^2 \quad \text{subject to} \quad \left\| \beta \right\|_0 \le D \tag{1}\]</div>
 <p>Here, <span class="arithmatex">\(\|\beta\|_0\)</span> is the "<span class="arithmatex">\(L_0\)</span>-norm," which just counts the number of non-zero coefficients in the vector <span class="arithmatex">\(\beta\)</span>. Because this problem is NP-hard, we need a variety of heuristic, approximate, or specialized algorithms to find a good solution.</p>
 <hr />
-<h2 id="search-algorithms-the-sparsifying-operator">Search Algorithms: The Sparsifying Operator ⚙️<a class="headerlink" href="#search-algorithms-the-sparsifying-operator" title="Permanent link">&para;</a></h2>
+<h2 id="search-algorithms-the-sparsifying-operator">Search Algorithms: The Sparsifying Operator<a class="headerlink" href="#search-algorithms-the-sparsifying-operator" title="Permanent link">&para;</a></h2>
 <p>The following methods are implemented in <code>search.py</code> to select the best possible subset of <span class="arithmatex">\(D\)</span> features from all the candidates.</p>
 <h3 id="brute-force-search-_find_best_models_brute_force">Brute-Force Search (<code>_find_best_models_brute_force</code>)<a class="headerlink" href="#brute-force-search-_find_best_models_brute_force" title="Permanent link">&para;</a></h3>
 <h4 id="methodology">Methodology<a class="headerlink" href="#methodology" title="Permanent link">&para;</a></h4>
@@ -1217,7 +1217,7 @@
 <h4 id="application-in-symbolic-regression_6">Application in Symbolic Regression<a class="headerlink" href="#application-in-symbolic-regression_6" title="Permanent link">&para;</a></h4>
 <p>This method finds a set of symbolic features that create a new space where different classes are as geometrically separable as possible. The result isn't a single equation but a set of transformations (the features) that define this optimal classification space.</p>
 <hr />
-<h2 id="post-search-non-linear-refinement">Post-Search: Non-Linear Refinement 📈<a class="headerlink" href="#post-search-non-linear-refinement" title="Permanent link">&para;</a></h2>
+<h2 id="post-search-non-linear-refinement">Post-Search: Non-Linear Refinement<a class="headerlink" href="#post-search-non-linear-refinement" title="Permanent link">&para;</a></h2>
 <p>After a linear model is found, an optional step can refine it by introducing non-linear parameters.</p>
 <ul>
 <li><strong>Methodology:</strong> It takes a discovered model, like <span class="arithmatex">\(y \approx \beta_0 + \beta_1 \Phi_1 + \beta_2 \Phi_2\)</span>, and checks if replacing a feature <span class="arithmatex">\(\Phi_i\)</span> with a parameterized version, like <span class="arithmatex">\(e^{-p \Phi_i}\)</span> or <span class="arithmatex">\(\Phi_i^p\)</span>, improves the fit. It uses a numerical optimization algorithm (L-BFGS-B) to find the best values for both the linear coefficients (<span class="arithmatex">\(\beta_i\)</span>) and the new non-linear parameters (<span class="arithmatex">\(p\)</span>).</li>
