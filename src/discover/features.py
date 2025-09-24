@@ -18,14 +18,12 @@ and evaluated efficiently.
 import pandas as pd
 import numpy as np
 import sympy
-from pathlib import Path
 import warnings
 
-from joblib import Memory
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.tree import DecisionTreeRegressor, DecisionTreeClassifier
-from .constants import ALL_CLASSIFICATION_TASKS, REGRESSION
+from .constants import ALL_CLASSIFICATION_TASKS
 
 try:
     import cupy as cp
@@ -159,8 +157,10 @@ class UFeature:
     def _apply_binary_op(self, other, op_func, sym_op_func, op_name, unit_op=None, 
                          unit_check=None, domain_check=None):
          if self.ureg and unit_check and not unit_check(self.unit, 
-                                                        other.unit): return None
-         if domain_check and not domain_check(self, other): return None
+                                                        other.unit): 
+             return None
+         if domain_check and not domain_check(self, other): 
+             return None
 
          if not self.ureg:
               try:
@@ -172,7 +172,8 @@ class UFeature:
                                   new_sym_expr, new_base_features, self.xp, 
                                   dtype=self.values.dtype, 
                                   torch_device=self.torch_device)
-              except: return None
+              except Exception: 
+                  return None
          try:
             new_unit = unit_op(self.unit, other.unit) if unit_op else op_func(self.unit, 
                                                                             other.unit)
@@ -184,7 +185,8 @@ class UFeature:
                             new_base_features, self.xp, dtype=self.values.dtype, 
                             torch_device=self.torch_device)
          except (pint.DimensionalityError, ValueError, TypeError, 
-                            OverflowError): return None
+                            OverflowError): 
+             return None
 
     def __add__(self, other): return self._apply_binary_op(other, 
                                         lambda a, b: a + b, lambda a, b: a + b, '+')
@@ -193,22 +195,29 @@ class UFeature:
     def __mul__(self, other): return self._apply_binary_op(other, 
                                         lambda a, b: a * b, lambda a, b: a * b, '*')
     def __truediv__(self, other):
-        if other.has_zero: return None
+        if other.has_zero: 
+            return None
         return self._apply_binary_op(other, lambda a, b: a / b, 
                                      lambda a, b: a / b, '/')
 
     def _apply_unary_op(self, val_op, unit_op, sym_op, name_func, 
                         unit_check=None, domain_check=None):
-        if self.xp == torch: finfo = torch.finfo(self.values.dtype)
-        else: finfo = self.xp.finfo(self.values.dtype)
+        if self.xp == torch: 
+            finfo = torch.finfo(self.values.dtype)
+        else: 
+            finfo = self.xp.finfo(self.values.dtype)
         if self.max_val > finfo.max / 2 or self.min_val < finfo.min / 2:
-            if 'exp' in name_func(''): return None
+            if 'exp' in name_func(''): 
+                return None
 
-        if self.ureg and unit_check and not unit_check(self.unit): return None
-        if domain_check and not domain_check(self): return None
+        if self.ureg and unit_check and not unit_check(self.unit): 
+            return None
+        if domain_check and not domain_check(self): 
+            return None
         try:
             new_values = val_op(self.values)
-            if not self.xp.all(self.xp.isfinite(new_values)): return None
+            if not self.xp.all(self.xp.isfinite(new_values)): 
+                return None
             new_unit = unit_op(self.unit) if self.ureg else None
             new_sym_expr = sym_op(self.sym_expr)
             new_name = name_func(self.name)
@@ -217,11 +226,14 @@ class UFeature:
                             new_base_features, self.xp, dtype=self.values.dtype, 
                             torch_device=self.torch_device)
         except (ValueError, TypeError, pint.DimensionalityError, 
-                            OverflowError): return None
+                            OverflowError): 
+            return None
 
     def power(self, p):
-        if p != int(p) and not self.is_positive : return None
-        if self.has_zero and p < 0: return None
+        if p != int(p) and not self.is_positive : 
+            return None
+        if self.has_zero and p < 0: 
+            return None
         return self._apply_unary_op(lambda a: a**p, lambda u: u**p, 
                                     lambda s: s**p, lambda n: f"({n})**{p}")
 
@@ -296,11 +308,14 @@ def apply_op(f, op_func, min_val, max_val):
            abs_vals = new_feat.xp.abs(new_feat.values)
            if new_feat.xp.any(abs_vals < min_val) or new_feat.xp.any(abs_vals > max_val):
                return None
-           if new_feat.xp.all(abs_vals < epsilon): return None
+           if new_feat.xp.all(abs_vals < epsilon): 
+               return None
            amin, amax = _safe_min_max(new_feat.values, xp=new_feat.xp)
-           if amax - amin < epsilon: return None
+           if amax - amin < epsilon: 
+               return None
            return new_feat.sym_expr, new_feat
-    except Exception: pass
+    except Exception: 
+        pass
     return None
 
 
@@ -308,7 +323,8 @@ def apply_binary_op(f1, f2, op_name, min_val, max_val):
     epsilon = 1e-7 if f1.xp == torch and f1.values.dtype == torch.float32 else 1e-9
     try:
         op_method_name = UFeature.get_binary_op_method_name(op_name)
-        if not op_method_name: return None
+        if not op_method_name: 
+            return None
 
         if op_method_name in ['__sub__', '__truediv__'] and f1.sym_expr == f2.sym_expr:
             return None
@@ -319,11 +335,14 @@ def apply_binary_op(f1, f2, op_name, min_val, max_val):
             abs_vals = new_feat.xp.abs(new_feat.values)
             if new_feat.xp.any(abs_vals < min_val) or new_feat.xp.any(abs_vals > max_val):
                 return None
-            if new_feat.xp.all(abs_vals < epsilon): return None
+            if new_feat.xp.all(abs_vals < epsilon): 
+                return None
             amin, amax = _safe_min_max(new_feat.values, xp=new_feat.xp)
-            if amax - amin < epsilon: return None
+            if amax - amin < epsilon: 
+                return None
             return new_feat.sym_expr, new_feat
-    except Exception: pass
+    except Exception: 
+        pass
     return None
 
 def apply_custom_binary_op(f1, f2, op_def, min_val, max_val):
@@ -338,12 +357,16 @@ def apply_custom_binary_op(f1, f2, op_def, min_val, max_val):
         )
         if new_feat and new_feat.xp.all(new_feat.xp.isfinite(new_feat.values)):
             abs_vals = new_feat.xp.abs(new_feat.values)
-            if new_feat.xp.any(abs_vals < min_val) or new_feat.xp.any(abs_vals > max_val): return None
-            if new_feat.xp.all(abs_vals < epsilon): return None
+            if new_feat.xp.any(abs_vals < min_val) or new_feat.xp.any(abs_vals > max_val): 
+                return None
+            if new_feat.xp.all(abs_vals < epsilon): 
+                return None
             amin, amax = _safe_min_max(new_feat.values, xp=new_feat.xp)
-            if amax - amin < epsilon: return None
+            if amax - amin < epsilon: 
+                return None
             return new_feat.sym_expr, new_feat
-    except Exception: pass
+    except Exception: 
+        pass
     return None
 
 # It no longer copies data to the CPU if it's already on the GPU.
@@ -352,24 +375,32 @@ def apply_parametric_op(feature, op_def, min_val, max_val):
     xp = feature.xp
     try:
         p_initial = op_def['p_initial']
-        if op_def.get('domain_check') and not op_def['domain_check'](feature): return None
-        if feature.ureg and op_def.get('unit_check') and not op_def['unit_check'](feature.unit): return None
+        if op_def.get('domain_check') and not op_def['domain_check'](feature): 
+            return None
+        if feature.ureg and op_def.get('unit_check') and not op_def['unit_check'](feature.unit): 
+            return None
 
         new_values = op_def['func'](feature.values, p_initial, xp)
 
-        if not xp.all(xp.isfinite(new_values)): return None
+        if not xp.all(xp.isfinite(new_values)): 
+            return None
 
         abs_vals = xp.abs(new_values)
-        if xp.any(abs_vals < min_val) or xp.any(abs_vals > max_val): return None
-        if xp.all(abs_vals < epsilon): return None
+        if xp.any(abs_vals < min_val) or xp.any(abs_vals > max_val): 
+            return None
+        if xp.all(abs_vals < epsilon): 
+            return None
         amin, amax = _safe_min_max(new_values, xp=xp)
-        if amax - amin < epsilon: return None
+        if amax - amin < epsilon: 
+            return None
 
         p_symbols = [sympy.Symbol(p) for p in op_def['p_names']]
         new_sym_expr = op_def['sym_func'](feature.sym_expr, p_symbols).subs(zip(p_symbols, p_initial))
         new_unit = feature.unit
-        if op_def.get('unit_check'): new_unit = 'dimensionless'
-        elif op_def['p_names'] == ['p']: new_unit = feature.unit ** p_initial[0]
+        if op_def.get('unit_check'): 
+            new_unit = 'dimensionless'
+        elif op_def['p_names'] == ['p']: 
+            new_unit = feature.unit ** p_initial[0]
         op_name = list(PARAMETRIC_OP_DEFS.keys())[list(PARAMETRIC_OP_DEFS.values()).index(op_def)]
         new_name = f"{op_name}(p={p_initial})({feature.name})"
 
@@ -462,10 +493,12 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
     primary_symbols = [sympy.Symbol(s, real=True) for s in clean_names]
     original_symbols = [sympy.Symbol(c, real=True) for c in X.columns]
     clean_to_original_map = dict(zip(primary_symbols, original_symbols))
-    X_clean = X.copy(); X_clean.columns = clean_names
+    X_clean = X.copy()
+    X_clean.columns = clean_names
 
     initial_features = []
-    if not primary_units: primary_units = {}
+    if not primary_units: 
+        primary_units = {}
     for i, name in enumerate(X_clean.columns):
         original_name = str(original_symbols[i])
         unit = primary_units.get(original_name, 'dimensionless' if ureg else None)
@@ -476,8 +509,10 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
                                          xp, dtype, torch_device))
 
     device_name = "CPU"
-    if xp == cp: device_name = "NVIDIA GPU"
-    elif xp == torch and torch_device is not None: device_name = "Apple/MPS GPU"
+    if xp == cp: 
+        device_name = "NVIDIA GPU"
+    elif xp == torch and torch_device is not None: 
+        device_name = "Apple/MPS GPU"
     print(f"\nStarting iterative feature generation on {device_name} to depth {depth}...")
     print(f"  Keeping top {n_features_per_sis_iter} features per iteration.")
 
@@ -503,19 +538,29 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
                         op_func = f.get_unary_op_func(op_name)
                         if op_func:
                             res = apply_op(f, op_func, min_abs_feat_val, max_abs_feat_val)
+
                     elif op_name in CUSTOM_UNARY_OP_DEFS:
                         op_def = CUSTOM_UNARY_OP_DEFS[op_name]
-                        op_func = lambda: f._apply_unary_op(op_def['func'],
-                                                            op_def.get('unit_op', 
-                                                                       lambda u: u),
-                                                            op_def['sym_func'],
-                                                            op_def['name_func'],
-                                                            op_def.get('unit_check'),
-                                                            op_def.get('domain_check'))
+
+                        def op_func():
+                            return f._apply_unary_op(
+                                op_def['func'],
+                                op_def.get('unit_op', lambda u: u),
+                                op_def['sym_func'],
+                                op_def['name_func'],
+                                op_def.get('unit_check'),
+                                op_def.get('domain_check'),
+                            )
+
                         res = apply_op(f, op_func, min_abs_feat_val, max_abs_feat_val)
+
                     elif op_name in parametric_ops and op_name in PARAMETRIC_OP_DEFS:
-                        res = apply_parametric_op(f, PARAMETRIC_OP_DEFS[op_name],
-                                                  min_abs_feat_val, max_abs_feat_val)
+                        res = apply_parametric_op(
+                            f,
+                            PARAMETRIC_OP_DEFS[op_name],
+                            min_abs_feat_val,
+                            max_abs_feat_val,
+                        )
 
                     if res:
                         expr, feat = res
@@ -642,9 +687,10 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
                                         multitask_sis_method=multitask_sis_method)
         
         if not isinstance(sorted_scores_series, pd.Series) or sorted_scores_series.empty:
-            print("  SIS screening returned no features. Stopping."); break
+            print("  SIS screening returned no features. Stopping.")
+            break
         
-        print(f"  SIS screening complete. Top features at this depth:")
+        print("  SIS screening complete. Top features at this depth:")
         top_features_data = []
         y_np = y.values if isinstance(y, pd.Series) else y
         
@@ -713,7 +759,8 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
                 std_args = {'unbiased': True} if xp == torch else {'ddof': 1}
                 std_devs = xp.std(top_k_tensor, axis=0, **std_args)
 
-                if std_devs.ndim > 1: std_devs = std_devs.squeeze()
+                if std_devs.ndim > 1: 
+                    std_devs = std_devs.squeeze()
 
                 corr_matrix_gpu = cov_matrix / xp.outer(std_devs, std_devs)
                 corr_matrix_gpu[xp.isnan(corr_matrix_gpu)] = 0 
@@ -752,8 +799,10 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
                 upper_tri = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
                 keep, seen = [], set()
                 for col in top_k_names:
-                    if col in seen: continue
-                    keep.append(col); seen.add(col)
+                    if col in seen: 
+                        continue
+                    keep.append(col) 
+                    seen.add(col)
                     dupes = upper_tri.index[upper_tri.loc[:, col] > 0.999].tolist()
                     seen.update(dupes)
                 if len(keep) < len(top_k_names):
@@ -775,7 +824,8 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
         last_level_features = surviving_new_features
         print(f"    Pruned feature space to {len(candidate_features_map)} candidates.")
         if not surviving_new_features and d > 0:
-            print("  No newly generated features survived this screening round. Stopping iteration."); break
+            print("  No newly generated features survived this screening round. Stopping iteration.") 
+            break
         if d < depth:
             print(f"    {len(last_level_features)} features (survivors from this depth) will form the basis for depth {d+1}.")
 
@@ -783,8 +833,10 @@ def generate_features_iteratively(X, y, primary_units, depth, n_features_per_sis
     final_features_list = list(candidate_features_map.values())
 
     def _to_cpu(arr):
-        if CUPY_AVAILABLE and isinstance(arr, cp.ndarray): return cp.asnumpy(arr)
-        if TORCH_AVAILABLE and isinstance(arr, torch.Tensor): return arr.cpu().numpy()
+        if CUPY_AVAILABLE and isinstance(arr, cp.ndarray): 
+            return cp.asnumpy(arr)
+        if TORCH_AVAILABLE and isinstance(arr, torch.Tensor): 
+            return arr.cpu().numpy()
         return arr
 
     values_dict = {str(_canonicalize_expr(feat.sym_expr)): _to_cpu(feat.values) for feat in final_features_list}

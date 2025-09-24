@@ -26,7 +26,6 @@ import sympy
 import time
 import math
 import warnings
-import random 
 from itertools import combinations
 from scipy.optimize import minimize
 from joblib import Parallel, delayed
@@ -70,7 +69,7 @@ except ImportError:
         def isfinite(x): return np.isfinite(x)
 
     torch = torch_dummy()
-except:
+except Exception:
     pass 
 
 
@@ -140,7 +139,8 @@ def _refine_model_with_nlopt(sisso_instance, y, sample_weight, current_model_dat
     for i, base_feat_name in enumerate(base_feature_names):
         for op_name in parametric_ops:
             op_def = PARAMETRIC_OP_DEFS.get(op_name)
-            if not op_def: continue
+            if not op_def: 
+                continue
             
             def objective_func(params):
                 lin_coefs = params[:len(initial_linear_coefs)] 
@@ -152,8 +152,10 @@ def _refine_model_with_nlopt(sisso_instance, y, sample_weight, current_model_dat
                    # Apply the parametric function only to the i-th feature
                    current_desc_vals[:, i] = op_def['func'](base_features_values[:, i], 
                                                             nonlin_params)
-                   if np.any(~np.isfinite(current_desc_vals[:, i])): return float('inf')
-                except (ValueError, OverflowError): return float('inf')
+                   if np.any(~np.isfinite(current_desc_vals[:, i])): 
+                       return float('inf')
+                except (ValueError, OverflowError): 
+                    return float('inf')
                 
                 coef_offset = 1 if fit_intercept else 0
                 y_pred += np.sum(lin_coefs[coef_offset:] * current_desc_vals, axis=1)
@@ -219,7 +221,8 @@ def _find_best_models_sa(sisso_instance, phi_sis_df, y, D_max, task_type,
         t_start_d = time.time()
         print(f"\n--- SA Search: Dimension {D} ({iterations} iterations) ---")
         if D > n_total_features:
-            print(f"  Dimension {D} is larger than the number of available features ({n_total_features}). Stopping."); break
+            print(f"  Dimension {D} is larger than the number of available features ({n_total_features}). Stopping.")
+            break
 
         # Robust Initialization
         current_features_list = None
@@ -336,11 +339,13 @@ def _find_best_models_rmhc(sisso_instance, phi_sis_df, y, X_df, D_max, task_type
             current_score = best_score_for_D
 
             for i in range(iterations):
-                if len(current_features) == 0: continue
+                if len(current_features) == 0: 
+                    continue
                 feature_to_remove = str(rng.choice(current_features))
                 
                 candidate_pool = [f for f in all_features if f not in current_features]
-                if not candidate_pool: continue
+                if not candidate_pool: 
+                    continue
                 feature_to_add = str(rng.choice(candidate_pool))
                 
                 mutated_combo = [f for f in current_features if f != feature_to_remove] + [feature_to_add]
@@ -399,7 +404,8 @@ def _find_best_models_omp(sisso_instance, phi_sis_df, y, D_max, task_type,
         print(f"\n--- OMP Search: Dimension {D_iter} ---")
         
         if candidate_features_df.empty:
-            print("  No more features to select. Stopping."); break
+            print("  No more features to select. Stopping.")
+            break
 
         correlations = candidate_features_df.corrwith(residual).abs()
         best_new_feature = str(correlations.idxmax())
@@ -415,7 +421,8 @@ def _find_best_models_omp(sisso_instance, phi_sis_df, y, D_max, task_type,
 
         if model_data is None:
             print(f"  Could not fit a valid model for D={D_iter}. Stopping.")
-            selected_features.pop(); break
+            selected_features.pop()
+            break
             
         print(f"    Model score for D={D_iter} (min): {score:.6g}")
 
@@ -465,7 +472,8 @@ def _find_best_models_miqp(sisso_instance, phi_sis_df, y, D_max, task_type,
     try:
         ridge_model = LinearRegression(fit_intercept=False).fit(X, y_np)
         M = 10 * np.max(np.abs(ridge_model.coef_))
-        if M < 1.0 or not np.isfinite(M): M = 10.0
+        if M < 1.0 or not np.isfinite(M): 
+            M = 10.0
     except Exception:
         M = 10.0 
     print(f"  Using Big-M value: {M:.2f}")
@@ -510,7 +518,8 @@ def _find_best_models_miqp(sisso_instance, phi_sis_df, y, D_max, task_type,
             
             final_feature_names = [feature_names[i - 1] for i in selected_indices if i > 0] if fit_intercept else [feature_names[i] for i in selected_indices]
             
-            if not final_feature_names: continue
+            if not final_feature_names: 
+                continue
 
             X_combo_df = phi_pruned[final_feature_names]
             score, model_data = _score_single_model(X_combo_df, y, task_type, 
@@ -518,7 +527,8 @@ def _find_best_models_miqp(sisso_instance, phi_sis_df, y, D_max, task_type,
                                                     device, torch_device)
             sisso_instance.timing_summary_[f'MIQP Search D={D_iter}'] = time.time() - t_start_d
 
-            if model_data is None: continue
+            if model_data is None: 
+                continue
 
             formulas = [_format_feature_str(sisso_instance, f) for f in final_feature_names]
             print(f"    Optimal model for D={len(final_feature_names)} found with score: {score:.6g}")
@@ -534,9 +544,11 @@ def _find_best_models_miqp(sisso_instance, phi_sis_df, y, D_max, task_type,
             }
 
         except gp.GurobiError as e:
-            print(f"  Gurobi error on D={D_iter}: {e}. Stopping MIQP search."); break
+            print(f"  Gurobi error on D={D_iter}: {e}. Stopping MIQP search.")
+            break
         except Exception as e:
-            print(f"  An unexpected error occurred during MIQP search for D={D_iter}: {e}"); break
+            print(f"  An unexpected error occurred during MIQP search for D={D_iter}: {e}")
+            break
             
     return models_by_dim
 
@@ -567,7 +579,8 @@ def _find_best_models_ch_greedy(sisso_instance, phi_sis_df, y, D_max, task_type,
         
         remaining_features = [f for f in candidate_features if f not in selected_features]
         if not remaining_features:
-            print("  No more features to select. Stopping."); break
+            print("  No more features to select. Stopping.")
+            break
         
         print(f"  Evaluating {len(remaining_features)} candidate features to add to the descriptor...")
         
@@ -578,7 +591,8 @@ def _find_best_models_ch_greedy(sisso_instance, phi_sis_df, y, D_max, task_type,
         
         valid_results = [res for res in results if np.isfinite(res[0])]
         if not valid_results:
-            print(f"  No valid models could be formed for D={D_iter}. Stopping."); break
+            print(f"  No valid models could be formed for D={D_iter}. Stopping.")
+            break
             
         best_score, best_new_feature, best_model_data = min(valid_results, key=lambda x: x[0])
         
@@ -629,16 +643,19 @@ def _find_best_models_brute_force(sisso_instance, phi_sis_df, y, D_max, task_typ
         t_start_d = time.time()
         print(f"\n--- Brute-Force: Searching for Dimension {D_iter} ---")
         if D_iter > n_features:
-            print(f"  Dimension {D_iter} is larger than the number of available features ({n_features}). Stopping."); break
+            print(f"  Dimension {D_iter} is larger than the number of available features ({n_features}). Stopping.")
+            break
         try:
             n_combos = math.comb(n_features, D_iter)
         except ValueError:
-            print(f"  Cannot compute combinations for D={D_iter} from {n_features} features. Stopping."); break
+            print(f"  Cannot compute combinations for D={D_iter} from {n_features} features. Stopping.")
+            break
         
         print(f"  Evaluating {n_combos:,} combinations of {D_iter} features.")
         if n_combos > MAX_COMBINATIONS_WARNING_THRESHOLD:
             warnings.warn(f"Number of combinations ({n_combos:,}) is very large. This may take a long time.")
-        if n_combos == 0: continue
+        if n_combos == 0: 
+            continue
             
         combos = combinations(feature_candidates, D_iter)
         tasks = (delayed(_score_brute_force_combo)(combo, phi_pruned, y, task_type, 
@@ -648,7 +665,8 @@ def _find_best_models_brute_force(sisso_instance, phi_sis_df, y, D_max, task_typ
         
         valid_results = [res for res in results if np.isfinite(res[0])]
         if not valid_results:
-            print(f"  No valid models found for D={D_iter}. Stopping."); break
+            print(f"  No valid models found for D={D_iter}. Stopping.")
+            break
 
         best_score, best_combo, best_coef, best_model = min(valid_results, 
                                                             key=lambda x: x[0])
@@ -684,14 +702,16 @@ def _find_best_models_greedy(sisso_instance, phi_sis_df, y, X_df, D_max, task_ty
         features_to_screen_df = phi_pruned.drop(columns=selected_features, 
                                                 errors='ignore')
         if features_to_screen_df.empty:
-            print("  No more features to select. Stopping."); break
+            print("  No more features to select. Stopping.")
+            break
 
         sorted_candidates_series = run_SIS(features_to_screen_df, current_target, 
                                            task_type, xp=sisso_instance.xp_)
         if sorted_candidates_series.empty:
-            print(f"  SIS found no new correlated features. Stopping at D={D_iter-1}."); break
+            print(f"  SIS found no new correlated features. Stopping at D={D_iter-1}.")
+            break
 
-        print(f"  SIS screening on residual complete. Top candidates:")
+        print("  SIS screening on residual complete. Top candidates:")
         top_features_data = []
         for i in range(min(5, len(sorted_candidates_series))):
             feat_name = str(sorted_candidates_series.index[i])
@@ -734,7 +754,8 @@ def _find_best_models_greedy(sisso_instance, phi_sis_df, y, X_df, D_max, task_ty
 
         if model_data is None:
             print(f"  Could not fit a valid linear model for D={D_iter}. Stopping.")
-            selected_features.pop(); break
+            selected_features.pop()
+            break
 
         current_sym_features = [sisso_instance.feature_space_sym_map_.get(f, 
                                         sympy.sympify(f)) for f in selected_features]
@@ -774,10 +795,12 @@ def _find_best_models_sisso_pp(sisso_instance, phi_sis_df, y, D_max, task_type,
     X_data_cpu = phi_pruned.values.astype(dtype)
 
     if device == 'cuda' and CUPY_AVAILABLE:
-        print("  Using CUDA backend for SISSO++ search."); xp = cp
+        print("  Using CUDA backend for SISSO++ search.")
+        xp = cp
         X_data = xp.asarray(X_data_cpu)
     elif device == 'mps' and TORCH_AVAILABLE:
-        print("  Using MPS backend for SISSO++ search."); xp = torch
+        print("  Using MPS backend for SISSO++ search.")
+        xp = torch
         torch_dtype = torch.float32 if dtype == np.float32 else torch.float64
         X_data = torch.from_numpy(X_data_cpu).to(torch_device, dtype=torch_dtype)
     else:
@@ -790,7 +813,8 @@ def _find_best_models_sisso_pp(sisso_instance, phi_sis_df, y, D_max, task_type,
         warnings.warn("INFO: For 'sisso++' classification, using OLS on a one-hot encoded target as a proxy for search.")
         lb = LabelBinarizer()
         y_proxy_np = lb.fit_transform(y)
-        if y_proxy_np.ndim == 1: y_proxy_np = y_proxy_np.reshape(-1, 1)
+        if y_proxy_np.ndim == 1: 
+            y_proxy_np = y_proxy_np.reshape(-1, 1)
     elif task_type == MULTITASK:
         print("INFO: For 'sisso++' multitask, using sum of OLS-RSS across all targets as a proxy for search.")
         y_proxy_np = y.values
@@ -819,7 +843,8 @@ def _find_best_models_sisso_pp(sisso_instance, phi_sis_df, y, D_max, task_type,
     for i in range(n_features):
         x_i = X_c[:, i]
         norm_sq_xi = xp.dot(x_i, x_i)
-        if norm_sq_xi < 1e-18: continue
+        if norm_sq_xi < 1e-18: 
+            continue
         
         rss_vec = initial_rss_vec - (y_c.T @ x_i)**2 / norm_sq_xi
         total_rss = float(xp.sum(rss_vec))
@@ -829,7 +854,8 @@ def _find_best_models_sisso_pp(sisso_instance, phi_sis_df, y, D_max, task_type,
             d1_results.append({'proxy_score': proxy_score, 'rss': total_rss, 'indices': [i]})
 
     if not d1_results:
-        print("  No valid 1D models found. Stopping."); return {}
+        print("  No valid 1D models found. Stopping.")
+        return {}
 
     d1_results.sort(key=lambda item: item['proxy_score'])
     best_models_at_level = d1_results[:beam_width]
@@ -855,7 +881,8 @@ def _find_best_models_sisso_pp(sisso_instance, phi_sis_df, y, D_max, task_type,
         next_level_candidates = []
         
         for model_info in best_models_at_level:
-            if model_info['rss'] > upper_bound_rss: continue
+            if model_info['rss'] > upper_bound_rss: 
+                continue
             prev_indices = model_info['indices']
             if 'q' not in model_info:
                 model_info['q'], _ = xp.linalg.qr(X_c[:, prev_indices]) if xp != torch else torch.linalg.qr(X_c[:, prev_indices])
@@ -867,7 +894,8 @@ def _find_best_models_sisso_pp(sisso_instance, phi_sis_df, y, D_max, task_type,
             for new_feat_idx in range(prev_indices[-1] + 1, n_features):
                 w = X_c[:, new_feat_idx] - prev_q @ (prev_q.T @ X_c[:, new_feat_idx])
                 norm_sq_w = xp.dot(w, w)
-                if norm_sq_w < 1e-18: continue
+                if norm_sq_w < 1e-18: 
+                    continue
 
                 new_rss_vec = rss_after_proj_vec - (residual_after_proj.T @ w)**2 / norm_sq_w
                 new_total_rss = float(xp.sum(new_rss_vec))
@@ -878,7 +906,8 @@ def _find_best_models_sisso_pp(sisso_instance, phi_sis_df, y, D_max, task_type,
                                               'indices': prev_indices + [new_feat_idx]})
 
         if not next_level_candidates:
-            print("  No new valid models found for this dimension. Stopping search."); break
+            print("  No new valid models found for this dimension. Stopping search.")
+            break
             
         next_level_candidates.sort(key=lambda item: item['proxy_score'])
         upper_bound_rss = min(upper_bound_rss, next_level_candidates[0]['rss'])

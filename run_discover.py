@@ -31,7 +31,6 @@ from discover import (
     DiscoverCHClassifier,
     print_descriptor_formula # Import the formatter
 )
-from discover.features import generate_features_iteratively # Need to import this for the return type
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score, mean_squared_error
 
@@ -52,7 +51,8 @@ def run_analysis(config_path):
     workdir = Path(config.get('workdir', 'discover_output'))
     if workdir.exists():
         if input(f"Workdir '{workdir}' already exists. Overwrite? (y/N): ").lower() != 'y':
-            print("Aborting."); return
+            print("Aborting.")
+            return
         shutil.rmtree(workdir)
     
     workdir.mkdir(parents=True, exist_ok=True) # Ensure workdir is created

@@ -89,7 +89,8 @@ class _BootstrapOutOfBagSplitter:
             test_mask = np.ones(n_samples, dtype=bool)
             test_mask[np.unique(train_idx)] = False
             test_idx = indices[test_mask]
-            if len(test_idx) == 0: continue
+            if len(test_idx) == 0: 
+                continue
             yield train_idx, test_idx
 
 
@@ -114,12 +115,16 @@ class DiscoverBase(BaseEstimator):
 
     def _parse_config(self, config):
         valid_selection_methods = ['cv', 'bootstrap', 'aic', 'bic']
-        if 'task_type' in config: config.setdefault('calc_type', config['task_type'])
-        if 'max_rung' in config: config.setdefault('depth', config['max_rung'])
-        if 'desc_dim' in config: config.setdefault('max_D', config['desc_dim'])
-        if 'top_k' in config: config.setdefault('n_sis_select', config['top_k'])
-        if 'num_cpu_threads' in config: config.setdefault('n_jobs', 
-                                                          config['num_cpu_threads'])
+        if 'task_type' in config: 
+            config.setdefault('calc_type', config['task_type'])
+        if 'max_rung' in config: 
+            config.setdefault('depth', config['max_rung'])
+        if 'desc_dim' in config: 
+            config.setdefault('max_D', config['desc_dim'])
+        if 'top_k' in config: 
+            config.setdefault('n_sis_select', config['top_k'])
+        if 'num_cpu_threads' in config: 
+            config.setdefault('n_jobs', config['num_cpu_threads'])
         
         calc_type = config.get('calc_type', REGRESSION)
         sis_select = config.get('n_sis_select')
@@ -162,7 +167,8 @@ class DiscoverBase(BaseEstimator):
         self.max_D = config.get('max_D', 3)
 
         self.sis_sizes = config.get('sis_sizes', [sis_select] if sis_select else [100])
-        if not isinstance(self.sis_sizes, list): self.sis_sizes = [self.sis_sizes]
+        if not isinstance(self.sis_sizes, list): 
+            self.sis_sizes = [self.sis_sizes]
         self.n_features_per_sis_iter = self.sis_sizes[0]
         if len(self.sis_sizes) > 1:
             warnings.warn(f"Multiple `sis_sizes` provided. In the iterative SISSO framework, only the first value ({self.n_features_per_sis_iter}) will be used for pruning at each depth.")
@@ -257,9 +263,11 @@ class DiscoverBase(BaseEstimator):
     
     def _setup_task(self, X, y):
         if self.device == 'cuda':
-            if not CUPY_AVAILABLE: raise ImportError("device='cuda' requires cupy. Please `pip install cupy-cudaXX`.")
+            if not CUPY_AVAILABLE: 
+                raise ImportError("device='cuda' requires cupy. Please `pip install cupy-cudaXX`.")
             self.xp_ = cp
-            if cp: cp.cuda.Device(self.gpu_id).use()
+            if cp: 
+                cp.cuda.Device(self.gpu_id).use()
         elif self.device == 'mps':
                     if not MPS_AVAILABLE:
                         error_message = (
@@ -275,7 +283,8 @@ class DiscoverBase(BaseEstimator):
                     if self.dtype == 'float64':
                         warnings.warn("MPS device does not support float64. Forcing dtype to 'float32' for this run.")
                         self.dtype = 'float32'
-        else: self.xp_ = np
+        else: 
+            self.xp_ = np
         if np.dtype(self.dtype).type == np.float32:
             f32_max = np.finfo(np.float32).max
             if self.max_abs_feat_val > f32_max:
@@ -316,7 +325,8 @@ class DiscoverBase(BaseEstimator):
                               name='target') if not isinstance(y, 
                                                                pd.Series) else y.copy()
             self.classes_ = np.unique(y_out)
-            if len(self.classes_) < 2: raise ValueError("Classification requires at least 2 classes.")
+            if len(self.classes_) < 2: 
+                raise ValueError("Classification requires at least 2 classes.")
         else:
             self.task_type_ = REGRESSION
             y_out = pd.Series(y, index=X_df.index, 
@@ -328,7 +338,8 @@ class DiscoverBase(BaseEstimator):
     def _select_best_dimension_cv(self):
         title = "Bootstrap OOB Score Summary" if self.selection_method == 'bootstrap' else "Cross-Validation Score Summary"
         print(f"\n--- {title} (Score to Minimize) ---")
-        print(" D | Mean Score | Std Dev"); print("---|------------|----------")
+        print(" D | Mean Score | Std Dev")
+        print("---|------------|----------")
         best_score, abs_best_D = float('inf'), -1
         dims = sorted(self.cv_results_.keys())
         for D in dims:
@@ -337,12 +348,15 @@ class DiscoverBase(BaseEstimator):
              if mean_s < best_score - self.cv_min_improvement:
                  best_score, abs_best_D = mean_s, D
         print("---|------------|----------")
-        if abs_best_D == -1: print("Model selection failed for all dimensions."); return None
+        if abs_best_D == -1: 
+            print("Model selection failed for all dimensions.") 
+            return None
 
         self.best_D_ = abs_best_D
         score_threshold = best_score * (1.0 + self.cv_score_tolerance) if best_score >=0 else best_score * (1.0 - self.cv_score_tolerance)
         for D in dims:
-             if D > abs_best_D: continue
+             if D > abs_best_D: 
+                 continue
              mean_s, _ = self.cv_results_[D]
              if mean_s <= score_threshold:
                   self.best_D_ = D
@@ -353,7 +367,8 @@ class DiscoverBase(BaseEstimator):
     def _select_best_dimension_info_crit(self):
         title = f"{self.selection_method.upper()} Score Summary"
         print(f"\n--- {title} (Score to Minimize) ---")
-        print(" D | Score"); print("---|-------")
+        print(" D | Score")
+        print("---|-------")
         
         best_score, self.best_D_ = float('inf'), -1
         for D, (score, _) in sorted(self.cv_results_.items()):
@@ -371,10 +386,12 @@ class DiscoverBase(BaseEstimator):
 
     def fit(self, X, y, sample_weight=None):
         t_start_fit = time.time()
-        if self.workdir: Path(self.workdir).mkdir(parents=True, exist_ok=True)
+        if self.workdir: 
+            Path(self.workdir).mkdir(parents=True, exist_ok=True)
         if self.random_state is not None:
             np.random.seed(self.random_state)
-            if torch and hasattr(torch, 'manual_seed'): torch.manual_seed(self.random_state)
+            if torch and hasattr(torch, 'manual_seed'): 
+                torch.manual_seed(self.random_state)
 
         X_df, y_s = self._setup_task(X, y)
         
@@ -480,7 +497,8 @@ class DiscoverBase(BaseEstimator):
                         min_class_count = pd.Series(y_s).value_counts().min()
                         cv_folds = min(self.cv, min_class_count)
                         if cv_folds >= 2:
-                            if cv_folds < self.cv: warnings.warn(f"Smallest class has {min_class_count} members. Reducing CV folds to {cv_folds}.")
+                            if cv_folds < self.cv: 
+                                warnings.warn(f"Smallest class has {min_class_count} members. Reducing CV folds to {cv_folds}.")
                             cv_splitter = StratifiedKFold(n_splits=cv_folds, 
                                                 shuffle=True, 
                                                 random_state=self.random_state)
@@ -495,17 +513,16 @@ class DiscoverBase(BaseEstimator):
                          self.cv_results_[D] = (model_data['score'], 0.0)
                          print(f"    Parametric model: using training score {model_data['score']:.4g} for evaluation.")
                          continue
-                    
-                    # --- THIS IS THE CORRECT LOCATION FOR THE FIX ---
-                    # The list of features from the search can have mixed string types.
-                    # We sanitize it here before creating the DataFrame for CV.
+
                     sanitized_features = [str(f) for f in model_data['features']]
                     X_d = self.feature_space_df_[sanitized_features]
 
                     mean_score, std_score = _run_cv(X_d, y_s, cv_splitter, 
                                     self.task_type_, self.model_params_, sample_weight)
-                    if np.isfinite(mean_score): self.cv_results_[D] = (mean_score, std_score)
-                    else: print(f"   Evaluation failed for D={D}")
+                    if np.isfinite(mean_score): 
+                        self.cv_results_[D] = (mean_score, std_score)
+                    else: 
+                        print(f"   Evaluation failed for D={D}")
             
             self._select_best_dimension_cv()
 
@@ -516,7 +533,8 @@ class DiscoverBase(BaseEstimator):
             
             for D, model_data in self.models_by_dim_.items():
                 rmse = model_data['score']
-                if not np.isfinite(rmse): continue
+                if not np.isfinite(rmse): 
+                    continue
                 
                 rss = (rmse ** 2) * n_samples
                 k = D + (1 if not self.fix_intercept_ else 0)
@@ -538,7 +556,8 @@ class DiscoverBase(BaseEstimator):
             if self.models_by_dim_:
                  self.best_D_ = min(self.models_by_dim_, key=lambda D: self.models_by_dim_[D]['score'])
                  print(f"Selected Best D = {self.best_D_}")
-            for D, model_data in self.models_by_dim_.items(): self.cv_results_[D] = (model_data['score'], 0.0)
+            for D, model_data in self.models_by_dim_.items(): 
+                self.cv_results_[D] = (model_data['score'], 0.0)
         
         self.timing_summary_['Model Selection'] = time.time() - t_start_selection
             
@@ -571,11 +590,13 @@ class DiscoverBase(BaseEstimator):
         self.best_model_ = final_model_info['model']
         self.best_coef_ = final_model_info.get('coef')
 
-        if self.workdir: save_results(self, X_df,y_s,sample_weight)
+        if self.workdir: 
+            save_results(self, X_df,y_s,sample_weight)
         
         self.timing_summary_['Total Fit Time'] = time.time() - t_start_fit
         print("\n" + "="*25 + " Timing Summary " + "="*25)
-        for stage, duration in self.timing_summary_.items(): print(f"  - {stage:<30}: {duration:.2f} seconds")
+        for stage, duration in self.timing_summary_.items(): 
+            print(f"  - {stage:<30}: {duration:.2f} seconds")
         print("="*68 + "\nFit complete.")
         return self
 
@@ -668,7 +689,8 @@ class DiscoverBase(BaseEstimator):
     
     
     def _transform_X(self, X):
-        if self.best_model_ is None: raise RuntimeError("You must call fit() first.")
+        if self.best_model_ is None: 
+            raise RuntimeError("You must call fit() first.")
         is_parametric = hasattr(self.best_model_, 'is_parametric') and self.best_model_.is_parametric
         if is_parametric:
             raise RuntimeError("_transform_X is not applicable for a parametric model. Use predict() directly.")
@@ -686,7 +708,8 @@ class DiscoverBase(BaseEstimator):
         )
 
     def predict(self, X):
-        if self.best_model_ is None: raise RuntimeError("Call fit() before predict().")
+        if self.best_model_ is None: 
+            raise RuntimeError("Call fit() before predict().")
 
         X_df = pd.DataFrame(X) if not isinstance(X, pd.DataFrame) else X.copy()
 
@@ -704,8 +727,10 @@ class DiscoverBase(BaseEstimator):
 
         if isinstance(self.best_model_, GPUModel):
             y_pred_gpu = self.best_model_.predict(transformed_X.values)
-            if self.best_model_.device == 'cuda': return cp.asnumpy(y_pred_gpu)
-            elif self.best_model_.device == 'mps': return y_pred_gpu.cpu().numpy()
+            if self.best_model_.device == 'cuda': 
+                return cp.asnumpy(y_pred_gpu)
+            elif self.best_model_.device == 'mps': 
+                return y_pred_gpu.cpu().numpy()
         elif self.task_type_ == CH_CLASSIFICATION:
             predictions = np.full(len(X), -1, dtype=object)
             centroids = {c: np.mean(hull.points, axis=0) for c, hull in self.best_model_.items()}
@@ -713,8 +738,10 @@ class DiscoverBase(BaseEstimator):
                  inside_classes = []
                  for c, hull in self.best_model_.items():
                      if np.all(np.add(np.dot(point, hull.equations[:, :-1].T), 
-                                hull.equations[:, -1]) <= 1e-9): inside_classes.append(c)
-                 if len(inside_classes) == 1: predictions[i] = inside_classes[0]
+                                hull.equations[:, -1]) <= 1e-9): 
+                         inside_classes.append(c)
+                 if len(inside_classes) == 1: 
+                     predictions[i] = inside_classes[0]
                  elif len(inside_classes) > 1:
                       dists = {c: distance.euclidean(point, centroids[c]) for c in inside_classes}
                       predictions[i] = min(dists, key=dists.get)
@@ -722,7 +749,8 @@ class DiscoverBase(BaseEstimator):
         elif self.task_type_ == MULTITASK:
              return pd.DataFrame({task: model.predict(transformed_X) for task, 
                                   model in self.best_model_.items()})
-        else: return self.best_model_.predict(transformed_X)
+        else: 
+            return self.best_model_.predict(transformed_X)
 
     def predict_proba(self, X):
          is_parametric = hasattr(self.best_model_, 'is_parametric') and self.best_model_.is_parametric
@@ -741,9 +769,11 @@ class DiscoverBase(BaseEstimator):
             y_true_np = y.values if isinstance(y, (pd.Series, pd.DataFrame)) else np.asarray(y)
             if self.task_type_ == CH_CLASSIFICATION:
                 mask = y_pred != -1
-                if not np.any(mask): return 0.0
+                if not np.any(mask): 
+                    return 0.0
                 y_true_filtered, y_pred_filtered = y_true_np[mask], y_pred[mask]
-                if y_pred_filtered.dtype != y_true_filtered.dtype: y_pred_filtered = y_pred_filtered.astype(y_true_filtered.dtype)
+                if y_pred_filtered.dtype != y_true_filtered.dtype: 
+                    y_pred_filtered = y_pred_filtered.astype(y_true_filtered.dtype)
                 sw_filtered = np.asarray(sample_weight)[mask] if sample_weight is not None else None
                 return accuracy_score(y_true_filtered, y_pred_filtered, sample_weight=sw_filtered)
             else:
@@ -775,7 +805,8 @@ class DiscoverBase(BaseEstimator):
         )
 
     def summary_report(self, X, y, sample_weight):
-        if self.best_D_ is None: return "Fit was not successful. No summary to report."
+        if self.best_D_ is None: 
+            return "Fit was not successful. No summary to report."
         final_model_is_parametric = hasattr(self.best_model_, 'is_parametric') and self.best_model_.is_parametric
         selection_str = self.selection_method.upper()
         if self.selection_method == 'cv':

@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 from pathlib import Path
 from typing import Dict, List, Sequence, Tuple, Optional
 
@@ -169,7 +168,8 @@ def _parity_plot(y_true: pd.Series, y_pred: np.ndarray, title: str, ax=None):
     lims = [np.nanmin([y_true.min(), y_pred.min()]), 
             np.nanmax([y_true.max(), y_pred.max()])]
     ax.plot(lims, lims, 'k--', lw=1)
-    ax.set_xlim(lims); ax.set_ylim(lims)
+    ax.set_xlim(lims)
+    ax.set_ylim(lims)
     ax.set_xlabel('Actual')
     ax.set_ylabel('Predicted')
     r2 = r2_score(y_true, y_pred)
@@ -215,7 +215,8 @@ def _mode_best_allD(workdir: Path, Xdf: pd.DataFrame, y: pd.Series,
         if write_individual:
             out_path = workdir / f"parity_best_D{D}.png"
             fig_i, ax_i = _parity_plot(y, y_pred, formula_title)
-            fig_i.tight_layout(); fig_i.savefig(out_path, dpi=300)
+            fig_i.tight_layout()
+            fig_i.savefig(out_path, dpi=300)
             plt.close(fig_i)
 
     for j in range(len(plottable), len(axes.flat)):
@@ -242,7 +243,8 @@ def _mode_sis_topN(workdir: Path, Xdf: pd.DataFrame,
     feature_col = None
     for cand in ['Feature', 'feature', 'symbol', 'name', 'descriptor']:
         if cand in sis_df.columns:
-            feature_col = cand; break
+            feature_col = cand
+            break
     if feature_col is None:
         feature_col = sis_df.columns[0]
 
@@ -278,7 +280,8 @@ def _mode_sis_topN(workdir: Path, Xdf: pd.DataFrame,
         if write_individual:
             out_path = workdir / f"parity_sis_{feat_name}.png"
             fig_i, ax_i = _parity_plot(y, y_pred, formula_title)
-            fig_i.tight_layout(); fig_i.savefig(out_path, dpi=300)
+            fig_i.tight_layout()
+            fig_i.savefig(out_path, dpi=300)
             plt.close(fig_i)
 
     for j in range(len(top_df), len(axes.flat)):
@@ -304,7 +307,8 @@ def _mode_discover_D(workdir: Path, Xdf: pd.DataFrame, y: pd.Series,
     match = None
     for m in models_summary:
         if int(m['Dimension']) == int(D_req):
-            match = m; break
+            match = m
+            break
     if match is None:
         raise ValueError(f"Requested dimension D={D_req} not found in final_models_summary.json")
     if not match.get('is_plottable'):
