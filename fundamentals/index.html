@@ -9,7 +9,7 @@
         <meta name="description" content="Symbolic Regression for Science">
       
       
-        <meta name="author" content="Your Name / Your Team">
+        <meta name="author" content="Uday Gajera, Mohsen Sotouneh">
       
       
       
@@ -1110,17 +1110,19 @@
 <p>OMP is a smarter, more robust version of the greedy algorithm. Instead of just adding a new feature, it <strong>recalculates the coefficients for all selected features</strong> at each step.</p>
 <ol>
 <li>Initialize the residual <span class="arithmatex">\(\mathbf{r}_0 = \mathbf{y}\)</span> and an empty feature set <span class="arithmatex">\(\mathcal{S}_0 = \emptyset\)</span>.</li>
-<li>For each step <span class="arithmatex">\(k\)</span> from 1 to <span class="arithmatex">\(D\)</span>:
-    a.  Find the feature <span class="arithmatex">\(\Phi_k^*\)</span> that's most correlated with the current residual <span class="arithmatex">\(\mathbf{r}_{k-1}\)</span>.
-        $$
-        \Phi_k^* = \underset{\Phi_j \notin \mathcal{S}<em>{k-1}}{\text{argmax}} \left| \langle \mathbf{r}</em>{k-1}, \Phi_j \rangle \right|
-        $$
-    b.  Add this feature to the active set: <span class="arithmatex">\(\mathcal{S}_k = \mathcal{S}_{k-1} \cup \{\Phi_k^*\}\)</span>.
-    c.  Solve a new least-squares problem using all features in the current set <span class="arithmatex">\(\mathcal{S}_k\)</span> to get updated coefficients <span class="arithmatex">\(\beta_k\)</span>.
-        $$
-        \beta_k = \Phi_{\mathcal{S}_k}^\dagger \mathbf{y} \quad \text{(least-squares solution / pseudo-inverse)}
-        $$
-    d.  Update the residual for the next iteration: <span class="arithmatex">\(\mathbf{r}_k = \mathbf{y} - \Phi_{\mathcal{S}_k} \beta_k\)</span>.</li>
+<li>For each step <span class="arithmatex">\(k\)</span> from 1 to <span class="arithmatex">\(D\)</span>:<ol>
+<li>Find the feature <span class="arithmatex">\(\Phi_k^*\)</span> that's most correlated with the current residual <span class="arithmatex">\(\mathbf{r}_{k-1}\)</span>.
+    $$
+    \Phi_k^* = \underset{\Phi_j \notin \mathcal{S}<em>{k-1}}{\text{argmax}} \left| \langle \mathbf{r}</em>{k-1}, \Phi_j \rangle \right|
+    $$</li>
+<li>Add this feature to the active set: <span class="arithmatex">\(\mathcal{S}_k = \mathcal{S}_{k-1} \cup \{\Phi_k^*\}\)</span>.</li>
+<li>Solve a new least-squares problem using all features in the current set <span class="arithmatex">\(\mathcal{S}_k\)</span> to get updated coefficients <span class="arithmatex">\(\beta_k\)</span>.
+    $$
+    \beta_k = \Phi_{\mathcal{S}_k}^\dagger \mathbf{y} \quad \text{(least-squares solution / pseudo-inverse)}
+    $$</li>
+<li>Update the residual for the next iteration: <span class="arithmatex">\(\mathbf{r}_k = \mathbf{y} - \Phi_{\mathcal{S}_k} \beta_k\)</span>.</li>
+</ol>
+</li>
 </ol>
 <h4 id="application-in-symbolic-regression_2">Application in Symbolic Regression<a class="headerlink" href="#application-in-symbolic-regression_2" title="Permanent link">&para;</a></h4>
 <p>OMP provides a more stable solution than a simple greedy search. By re-fitting the entire model at each step, it better handles correlations between symbolic features, often leading to a more physically meaningful final equation.</p>
@@ -1128,30 +1130,31 @@
 <h4 id="methodology_3">Methodology<a class="headerlink" href="#methodology_3" title="Permanent link">&para;</a></h4>
 <p>This highly efficient <strong>breadth-first search</strong> avoids the slow, combinatorial nature of brute-force search by using clever linear algebra updates. It keeps a "beam" (a list) of the best models at each dimension.</p>
 <ol>
-<li><strong>Dimension 1:</strong> It evaluates all 1D models and keeps the top <span class="arithmatex">\(N_{\text{beam}}\)</span> models with the lowest Residual Sum of Squares (RSS).</li>
-<li><strong>Dimension 2:</strong> For each of the top models from step 1, it tries adding every other available feature.</li>
 <li>
-<p><strong>The QR Update:</strong> The key to its efficiency is using <strong>QR decomposition</strong>:  </p>
+<p><strong>Dimension 1:</strong> It evaluates all 1D models and keeps the top <span class="arithmatex">\(N_{\text{beam}}\)</span> models with the lowest Residual Sum of Squares (RSS).</p>
 </li>
 <li>
-<p>If we have the decomposition for a feature set, written as <span class="arithmatex">\(X_D = Q_D R_D\)</span>, the Residual Sum of Squares (RSS) is simple to calculate:<br />
-     <div class="highlight"><pre><span></span><code>\text{RSS}_D = \|\mathbf{y}\|_2^2 - \|Q_D^T \mathbf{y}\|_2^2
-</code></pre></div></p>
+<p><strong>Dimension 2:</strong> For each of the top models from step 1, it tries adding every other available feature.</p>
 </li>
 <li>
-<p>To evaluate a new model with an added feature <span class="arithmatex">\(\mathbf{x}_{\text{new}}\)</span>, the algorithm calculates the component of <span class="arithmatex">\(\mathbf{x}_{\text{new}}\)</span> orthogonal to the space already spanned by <span class="arithmatex">\(Q_D\)</span>:<br />
-     <div class="highlight"><pre><span></span><code>\mathbf{w}_{\text{new}} = \mathbf{x}_{\text{new}} - Q_D Q_D^T \mathbf{x}_{\text{new}}
-</code></pre></div></p>
+<p><strong>The QR Update:</strong> The key to its efficiency is using <strong>QR decomposition</strong>.  </p>
 </li>
-<li>
-<p>The resulting improvement (reduction in RSS) is then found directly:<br />
-     <div class="highlight"><pre><span></span><code>\Delta \text{RSS} = \frac{(\mathbf{r}_D^T \mathbf{w}_{\text{new}})^2}{\|\mathbf{w}_{\text{new}}\|_2^2}
-</code></pre></div>
-     Here, <span class="arithmatex">\(\mathbf{r}_{D}\)</span> is the residual from the original model.  </p>
-</li>
-<li>
-<p>A new beam of top <span class="arithmatex">\(N_{\text{beam}}\)</span> 2D models is created, and the process repeats up to the maximum desired dimension <span class="arithmatex">\(D_{\text{max}}\)</span>.</p>
-</li>
+</ol>
+<p>If we have the decomposition for a feature set, written as <span class="arithmatex">\(X_D = Q_D R_D\)</span>, the Residual Sum of Squares (RSS) is simple to calculate:</p>
+<p>$$
+   \text{RSS}_D = |\mathbf{y}|_2^2 - |Q_D^T \mathbf{y}|_2^2
+   $$</p>
+<p>To evaluate a new model with an added feature, which we'll call <span class="arithmatex">\(\mathbf{x}_{\text{new}}\)</span>, the algorithm doesn't need to refit the entire model. Instead, it calculates the component of <span class="arithmatex">\(\mathbf{x}_{\text{new}}\)</span> that is orthogonal to the space already spanned by the existing features <span class="arithmatex">\(Q_D\)</span>:</p>
+<p>$$
+   \mathbf{w}<em>{\text{new}} = \mathbf{x}</em>{\text{new}} - Q_D Q_D^T \mathbf{x}_{\text{new}}
+   $$</p>
+<p>The resulting improvement (the reduction in RSS) is then found directly with this formula:</p>
+<p>$$
+   \Delta \text{RSS} = \frac{(\mathbf{r}<em>D^T \mathbf{w}</em>{\text{new}})^2}{|\mathbf{w}_{\text{new}}|_2^2}
+   $$</p>
+<p>Here, the term <span class="arithmatex">\(\mathbf{r}_{D}\)</span> represents the residual from the original model.</p>
+<ol>
+<li>A new beam of top <span class="arithmatex">\(N_{\text{beam}}\)</span> 2D models is created, and the process repeats up to the maximum desired dimension, <span class="arithmatex">\(D_{\text{max}}\)</span>.</li>
 </ol>
 <h4 id="application-in-symbolic-regression_3">Application in Symbolic Regression<a class="headerlink" href="#application-in-symbolic-regression_3" title="Permanent link">&para;</a></h4>
 <p>SISSO++ explores a much wider range of feature combinations than a greedy search without the massive cost of brute-force. It's excellent at finding high-quality, low-dimensional symbolic models that a simple greedy approach might miss.</p>
