@@ -13,6 +13,8 @@
       
       
       
+        <link rel="prev" href="../contribution/">
+      
       
       
       <link rel="icon" href="../assets/images/favicon.png">
@@ -20,7 +22,7 @@
     
     
       
-        <title>DISCOVER: A Physics-Informed, GPU-Accelerated Symbolic Regression Algorithm with Flexible Feature Constraints for Scientific Discovery - DISCOVER Documentation</title>
+        <title>Mathamatics - DISCOVER Documentation</title>
       
     
     
@@ -95,7 +97,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              DISCOVER: A Physics-Informed, GPU-Accelerated Symbolic Regression Algorithm with Flexible Feature Constraints for Scientific Discovery
+              Mathamatics
             
           </span>
         </div>
@@ -250,6 +252,27 @@
   
 
       
+        
+  
+  
+  
+    
+  
+  
+    <li class="md-tabs__item md-tabs__item--active">
+      <a href="./" class="md-tabs__link">
+        
+  
+  
+    
+  
+  Mathamatics
+
+      </a>
+    </li>
+  
+
+      
     </ul>
   </div>
 </nav>
@@ -378,6 +401,334 @@
   
 
       </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Mathamatics
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Mathamatics
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-core-problem-l_0-regularized-regression" class="md-nav__link">
+    <span class="md-ellipsis">
+      The Core Problem: $L_0$-Regularized Regression
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#search-algorithms-the-sparsifying-operator" class="md-nav__link">
+    <span class="md-ellipsis">
+      Search Algorithms (The Sparsifying Operator)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Search Algorithms (The Sparsifying Operator)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#brute-force-search-_find_best_models_brute_force" class="md-nav__link">
+    <span class="md-ellipsis">
+      Brute-Force Search (_find_best_models_brute_force)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Brute-Force Search (_find_best_models_brute_force)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#methodology" class="md-nav__link">
+    <span class="md-ellipsis">
+      Methodology
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#application-in-symbolic-regression" class="md-nav__link">
+    <span class="md-ellipsis">
+      Application in Symbolic Regression
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#greedy-search-_find_best_models_greedy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Greedy Search (_find_best_models_greedy)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Greedy Search (_find_best_models_greedy)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#methodology_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Methodology
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#application-in-symbolic-regression_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      Application in Symbolic Regression
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#orthogonal-matching-pursuit-omp-_find_best_models_omp" class="md-nav__link">
+    <span class="md-ellipsis">
+      Orthogonal Matching Pursuit (OMP) (_find_best_models_omp)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Orthogonal Matching Pursuit (OMP) (_find_best_models_omp)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#methodology_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      Methodology
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#application-in-symbolic-regression_2" class="md-nav__link">
+    <span class="md-ellipsis">
+      Application in Symbolic Regression
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sisso-breadth-first-qr-search-_find_best_models_sisso_pp" class="md-nav__link">
+    <span class="md-ellipsis">
+      SISSO++ (Breadth-First QR Search) (_find_best_models_sisso_pp)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="SISSO++ (Breadth-First QR Search) (_find_best_models_sisso_pp)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#methodology_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      Methodology
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#application-in-symbolic-regression_3" class="md-nav__link">
+    <span class="md-ellipsis">
+      Application in Symbolic Regression
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#random-mutation-hill-climbing-rmhc-simulated-annealing-sa" class="md-nav__link">
+    <span class="md-ellipsis">
+      Random Mutation Hill Climbing (RMHC) &amp; Simulated Annealing (SA)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Random Mutation Hill Climbing (RMHC) &amp; Simulated Annealing (SA)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#methodology_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      Methodology
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#application-in-symbolic-regression_4" class="md-nav__link">
+    <span class="md-ellipsis">
+      Application in Symbolic Regression
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#mixed-integer-quadratic-programming-miqp-_find_best_models_miqp" class="md-nav__link">
+    <span class="md-ellipsis">
+      Mixed-Integer Quadratic Programming (MIQP) (_find_best_models_miqp)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Mixed-Integer Quadratic Programming (MIQP) (_find_best_models_miqp)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#methodology_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      Methodology
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#application-in-symbolic-regression_5" class="md-nav__link">
+    <span class="md-ellipsis">
+      Application in Symbolic Regression
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#geometric-greedy-search-_find_best_models_ch_greedy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Geometric Greedy Search (_find_best_models_ch_greedy)
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Geometric Greedy Search (_find_best_models_ch_greedy)">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#methodology_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      Methodology
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#application-in-symbolic-regression_6" class="md-nav__link">
+    <span class="md-ellipsis">
+      Application in Symbolic Regression
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#post-search-non-linear-refinement-_refine_model_with_nlopt" class="md-nav__link">
+    <span class="md-ellipsis">
+      Post-Search: Non-Linear Refinement (_refine_model_with_nlopt)
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
