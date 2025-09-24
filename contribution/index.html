@@ -9,7 +9,7 @@
         <meta name="description" content="Symbolic Regression for Science">
       
       
-        <meta name="author" content="Your Name / Your Team">
+        <meta name="author" content="Uday Gajera, Mohsen Sotoudeh">
       
       
       
@@ -654,9 +654,9 @@
   
 
 
-<h1 id="contributing-to-discover">Contributing to DISCOVER</h1>
+<h1 id="contributing-to-discover">Contributing to DISCOVER<a class="headerlink" href="#contributing-to-discover" title="Permanent link">&para;</a></h1>
 <p>Thank you for your interest in contributing to DISCOVER! Contributions involving the addition of new features, bug fixes, or documentation improvements are all encouraged. The following guide will be of assistance.</p>
-<h3 id="code-structure-overview">Code Structure Overview</h3>
+<h3 id="code-structure-overview">Code Structure Overview<a class="headerlink" href="#code-structure-overview" title="Permanent link">&para;</a></h3>
 <p>The project is organized into several top-level modules:</p>
 <ul>
 <li><code>run_discover.py</code>: The main command-line interface.</li>
@@ -667,9 +667,9 @@
 <li><code>discover/utils.py</code>: Contains plotting helpers, result savers, and formula formatters.</li>
 <li><code>discover/constants.py</code>: Defines global constants (e.g., task types).</li>
 </ul>
-<h3 id="adding-a-new-mathematical-operator">Adding a New Mathematical Operator</h3>
+<h3 id="adding-a-new-mathematical-operator">Adding a New Mathematical Operator<a class="headerlink" href="#adding-a-new-mathematical-operator" title="Permanent link">&para;</a></h3>
 <p>Adding a custom operator is an easy method to extend DISCOVER's capabilities. Operators are defined in <code>discover/features.py</code>.</p>
-<h4 id="adding-a-custom-unary-operator">Adding a Custom Unary Operator</h4>
+<h4 id="adding-a-custom-unary-operator">Adding a Custom Unary Operator<a class="headerlink" href="#adding-a-custom-unary-operator" title="Permanent link">&para;</a></h4>
 <ol>
 <li>Open <code>discover/features.py</code>.</li>
 <li>Navigate to the <code>CUSTOM_UNARY_OP_DEFS</code> dictionary.</li>
@@ -681,48 +681,47 @@
 -   <code>unit_check</code> (optional): An optional function that is <code>True</code> if the input unit is right. For example, <code>lambda u: u.dimensionless</code> for trig functions.
 -   <code>domain_check</code> (optional): An optional function that is <code>True</code> if the input values are appropriate (e.g., <code>lambda f: np.all(f.values &gt; 0)</code> for <code>log</code>).
 -   <code>name_func</code>: A function that generates the string name of the new feature (e.g., <code>lambda n: f"tanh({n})"</code>).</p>
-<p><strong>Example: Adding a <code>tanh</code> operator</strong></p>
-<pre><code class="language-python"># In discover/features.py
-CUSTOM_UNARY_OP_DEFS = {
-    #. existing operators
-    'tanh': {
-        'func': np.tanh,
-        'sym_func': lambda s: sympy.tanh(s),
-'unit_check': lambda u: u.dimensionless,
-        'domain_check': None,
-        'name_func': lambda n: f&quot;tanh({n})&quot;,
-    }
-}
-</code></pre>
-<h4 id="adding-a-custom-binary-operator">Adding a Custom Binary Operator</h4>
+<p><strong>Example: Adding a <code>tanh</code> operator</strong>
+<div class="highlight"><pre><span></span><code><span class="c1"># In discover/features.py</span>
+<span class="n">CUSTOM_UNARY_OP_DEFS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="c1">#. existing operators</span>
+    <span class="s1">&#39;tanh&#39;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s1">&#39;func&#39;</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">tanh</span><span class="p">,</span>
+        <span class="s1">&#39;sym_func&#39;</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">s</span><span class="p">:</span> <span class="n">sympy</span><span class="o">.</span><span class="n">tanh</span><span class="p">(</span><span class="n">s</span><span class="p">),</span>
+<span class="s1">&#39;unit_check&#39;</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">u</span><span class="p">:</span> <span class="n">u</span><span class="o">.</span><span class="n">dimensionless</span><span class="p">,</span>
+        <span class="s1">&#39;domain_check&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span>
+        <span class="s1">&#39;name_func&#39;</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">n</span><span class="p">:</span> <span class="sa">f</span><span class="s2">&quot;tanh(</span><span class="si">{</span><span class="n">n</span><span class="si">}</span><span class="s2">)&quot;</span><span class="p">,</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div></p>
+<h4 id="adding-a-custom-binary-operator">Adding a Custom Binary Operator<a class="headerlink" href="#adding-a-custom-binary-operator" title="Permanent link">&para;</a></h4>
 <ol>
 <li>Open <code>discover/features.py</code>.</li>
 <li>Go to the <code>CUSTOM_BINARY_OP_DEFS</code> dictionary.</li>
 <li>Add a new entry.</li>
 </ol>
 <p>The form is the same as unary operators but with two arguments.</p>
-<p><strong>Example: Adding a <code>geometric_mean</code> operator</strong></p>
-<pre><code class="language-python"># In discover/features.py
-CUSTOM_BINARY_OP_DEFS = {
-    #. other operators
-    'geometric_mean': {
-        'func': lambda f1, f2: np.sqrt(f1 * f2),
-        'sym_func': lambda s1, s2: sympy.sqrt(s1 * s2),
-        'unit_op': lambda u1, u2: u1**0.5 * u2**0.5,
-    }}
-'unit_check': None, # Or a check for compatible units
-        'domain_check': lambda f1, f2: np.all(f1.values &gt;= 0) and np.all(f2.values &gt;= 0),
-        'op_name': &quot;&lt;G&gt;&quot;
-    }
-
-</code></pre>
-<h3 id="how-to-add-a-new-search-strategy">How to Add a New Search Strategy</h3>
+<p><strong>Example: Adding a <code>geometric_mean</code> operator</strong>
+<div class="highlight"><pre><span></span><code><span class="c1"># In discover/features.py</span>
+<span class="n">CUSTOM_BINARY_OP_DEFS</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="c1">#. other operators</span>
+    <span class="s1">&#39;geometric_mean&#39;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s1">&#39;func&#39;</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">f1</span><span class="p">,</span> <span class="n">f2</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">f1</span> <span class="o">*</span> <span class="n">f2</span><span class="p">),</span>
+        <span class="s1">&#39;sym_func&#39;</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">s1</span><span class="p">,</span> <span class="n">s2</span><span class="p">:</span> <span class="n">sympy</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">s1</span> <span class="o">*</span> <span class="n">s2</span><span class="p">),</span>
+        <span class="s1">&#39;unit_op&#39;</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">u1</span><span class="p">,</span> <span class="n">u2</span><span class="p">:</span> <span class="n">u1</span><span class="o">**</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">u2</span><span class="o">**</span><span class="mf">0.5</span><span class="p">,</span>
+    <span class="p">}}</span>
+<span class="s1">&#39;unit_check&#39;</span><span class="p">:</span> <span class="kc">None</span><span class="p">,</span> <span class="c1"># Or a check for compatible units</span>
+        <span class="s1">&#39;domain_check&#39;</span><span class="p">:</span> <span class="k">lambda</span> <span class="n">f1</span><span class="p">,</span> <span class="n">f2</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">f1</span><span class="o">.</span><span class="n">values</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">f2</span><span class="o">.</span><span class="n">values</span> <span class="o">&gt;=</span> <span class="mi">0</span><span class="p">),</span>
+        <span class="s1">&#39;op_name&#39;</span><span class="p">:</span> <span class="s2">&quot;&lt;G&gt;&quot;</span>
+    <span class="p">}</span>
+</code></pre></div></p>
+<h3 id="how-to-add-a-new-search-strategy">How to Add a New Search Strategy<a class="headerlink" href="#how-to-add-a-new-search-strategy" title="Permanent link">&para;</a></h3>
 <ol>
 <li>Open <code>discover/search.py</code>.</li>
 <li>Define a new function, typically with <code>_find_best_models_</code> prepended to its name. As an example, study <code>_find_best_models_greedy</code>.</li>
 <li>The function must have the following signature:
-    <code>python
-    def _find_best_models_new_strategy(sisso_instance, phi_sis_df, y, D_max, task_type, max_feat_cross_corr, sample_weight, device, torch_device, **kwargs):</code></li>
+    <div class="highlight"><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">_find_best_models_new_strategy</span><span class="p">(</span><span class="n">sisso_instance</span><span class="p">,</span> <span class="n">phi_sis_df</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">D_max</span><span class="p">,</span> <span class="n">task_type</span><span class="p">,</span> <span class="n">max_feat_cross_corr</span><span class="p">,</span> <span class="n">sample_weight</span><span class="p">,</span> <span class="n">device</span><span class="p">,</span> <span class="n">torch_device</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+</code></pre></div></li>
 <li>The function needs to return a dictionary with keys as dimensions (e.g., <code>1</code>, <code>2</code>, <code>3</code>) and values as dictionaries of the model info for that dimension. The model info dictionary should have:<ul>
 <li><code>features</code>: List of feature names (strings).</li>
 <li><code>score</code>: The model's training score.</li>
@@ -735,19 +734,19 @@ CUSTOM_BINARY_OP_DEFS = {
 </ul>
 </li>
 <li>Open <code>discover/models.py</code>, locate the <code>fit</code> method of the <code>DiscoverBase</code> class, and insert your new search strategy into the <code>if/elif</code> block that invokes the search functions.
-    <code>python
-    # In discover/models.py in the fit method
-    elif self.search_strategy == 'new_strategy':
-        search_results = _find_best_models_new_strategy(**search_args)</code></li>
+    <div class="highlight"><pre><span></span><code><span class="c1"># In discover/models.py in the fit method</span>
+<span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">search_strategy</span> <span class="o">==</span> <span class="s1">&#39;new_strategy&#39;</span><span class="p">:</span>
+    <span class="n">search_results</span> <span class="o">=</span> <span class="n">_find_best_models_new_strategy</span><span class="p">(</span><span class="o">**</span><span class="n">search_args</span><span class="p">)</span>
+</code></pre></div></li>
 </ol>
-<h3 id="coding-style-and-conventions">Coding Style and Conventions</h3>
+<h3 id="coding-style-and-conventions">Coding Style and Conventions<a class="headerlink" href="#coding-style-and-conventions" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>PEP 8:</strong> Conform to the PEP 8 coding style.</li>
 <li><strong>Docstrings:</strong> Use docstrings for all modules, classes, and functions with a brief and obvious explanation of their purpose, arguments, and return values.</li>
 <li><strong>Type Hinting:</strong> Type hints are encouraged for improved code readability and maintainability.</li>
 <li><strong>Clarity:</strong> Make your code readable and clear. Use comments where the logic is not apparent.</li>
 </ul>
-<h3 id="submitting-changes">Submitting Changes</h3>
+<h3 id="submitting-changes">Submitting Changes<a class="headerlink" href="#submitting-changes" title="Permanent link">&para;</a></h3>
 <ol>
 <li><strong>Fork the repository</strong> on GitHub.</li>
 <li><strong>Create a new branch</strong> for your feature or bugfix: <code>git checkout -b feature/my-new-operator</code>.</li>

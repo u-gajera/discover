@@ -9,7 +9,7 @@
         <meta name="description" content="Symbolic Regression for Science">
       
       
-        <meta name="author" content="Your Name / Your Team">
+        <meta name="author" content="Uday Gajera, Mohsen Sotoudeh">
       
       
       
@@ -464,7 +464,7 @@
         <li class="md-nav__item">
   <a href="#the-core-problem-l_0-regularized-regression" class="md-nav__link">
     <span class="md-ellipsis">
-      The Core Problem: $L_0$-Regularized Regression
+      The Core Problem: \(L_0\)-Regularized Regression
     </span>
   </a>
   
@@ -762,7 +762,7 @@
         <li class="md-nav__item">
   <a href="#the-core-problem-l_0-regularized-regression" class="md-nav__link">
     <span class="md-ellipsis">
-      The Core Problem: $L_0$-Regularized Regression
+      The Core Problem: \(L_0\)-Regularized Regression
     </span>
   </a>
   
@@ -1042,129 +1042,129 @@
   
 
 
-<h1 id="discover-a-physics-informed-gpu-accelerated-symbolic-regression-algorithm-with-flexible-feature-constraints-for-scientific-discovery"><strong>DISCOVER: A Physics-Informed, GPU-Accelerated Symbolic Regression Algorithm with Flexible Feature Constraints for Scientific Discovery</strong></h1>
-<h2 id="the-core-problem-l_0-regularized-regression">The Core Problem: $L_0$-Regularized Regression</h2>
-<p>All search methods in DISCOVER are designed to find an approximate or exact solution to the same fundamental problem. Given a large set of $M$ candidate symbolic features $\Phi = {\Phi_1, \Phi_2, \dots, \Phi_M}$ and a target property vector $\mathbf{y}$, the goal is to find a linear model with at most $D$ features that minimizes the prediction error. This is the $L_0$-norm regularized least-squares problem:</p>
-<p>$$
-\min_{\beta} \left| \mathbf{y} - \Phi \beta \right|_2^2 \quad \text{subject to} \quad \left| \beta \right|_0 \le D \tag{1}
-$$</p>
-<p>where $|\beta|_0$ counts the number of nonzero elements in the coefficient vector $\beta$. This problem is NP-hard, necessitating the use of various exact heuristic, approximate, or specialized algorithms.</p>
-<h2 id="search-algorithms-the-sparsifying-operator">Search Algorithms (The Sparsifying Operator)</h2>
-<p>The following methods are implemented in <code>search.py</code> to select the optimal subset of $D$ features from the screened candidates.</p>
-<h3 id="brute-force-search-_find_best_models_brute_force">Brute-Force Search (<code>_find_best_models_brute_force</code>)</h3>
-<h4 id="methodology">Methodology</h4>
-<p>This is the most straightforward and exhaustive approach. It systematically evaluates every possible combination of $D$ features from the pool of $M$ candidates.
-1.  For a given dimension $D$, generate all $\binom{M}{D}$ unique combinations of features.
-2.  For each combination, form a feature matrix $X_D$.
-3.  Fit an Ordinary Least Squares (OLS) regression model to find the coefficients $\beta$.
+<h1 id="discover-a-physics-informed-gpu-accelerated-symbolic-regression-algorithm-with-flexible-feature-constraints-for-scientific-discovery"><strong>DISCOVER: A Physics-Informed, GPU-Accelerated Symbolic Regression Algorithm with Flexible Feature Constraints for Scientific Discovery</strong><a class="headerlink" href="#discover-a-physics-informed-gpu-accelerated-symbolic-regression-algorithm-with-flexible-feature-constraints-for-scientific-discovery" title="Permanent link">&para;</a></h1>
+<h2 id="the-core-problem-l_0-regularized-regression">The Core Problem: <span class="arithmatex">\(L_0\)</span>-Regularized Regression<a class="headerlink" href="#the-core-problem-l_0-regularized-regression" title="Permanent link">&para;</a></h2>
+<p>All search methods in DISCOVER are designed to find an approximate or exact solution to the same fundamental problem. Given a large set of <span class="arithmatex">\(M\)</span> candidate symbolic features <span class="arithmatex">\(\Phi = \{\Phi_1, \Phi_2, \dots, \Phi_M\}\)</span> and a target property vector <span class="arithmatex">\(\mathbf{y}\)</span>, the goal is to find a linear model with at most <span class="arithmatex">\(D\)</span> features that minimizes the prediction error. This is the <span class="arithmatex">\(L_0\)</span>-norm regularized least-squares problem:</p>
+<div class="arithmatex">\[
+\min_{\beta} \left\| \mathbf{y} - \Phi \beta \right\|_2^2 \quad \text{subject to} \quad \left\| \beta \right\|_0 \le D \tag{1}
+\]</div>
+<p>where <span class="arithmatex">\(\|\beta\|_0\)</span> counts the number of nonzero elements in the coefficient vector <span class="arithmatex">\(\beta\)</span>. This problem is NP-hard, necessitating the use of various exact heuristic, approximate, or specialized algorithms.</p>
+<h2 id="search-algorithms-the-sparsifying-operator">Search Algorithms (The Sparsifying Operator)<a class="headerlink" href="#search-algorithms-the-sparsifying-operator" title="Permanent link">&para;</a></h2>
+<p>The following methods are implemented in <code>search.py</code> to select the optimal subset of <span class="arithmatex">\(D\)</span> features from the screened candidates.</p>
+<h3 id="brute-force-search-_find_best_models_brute_force">Brute-Force Search (<code>_find_best_models_brute_force</code>)<a class="headerlink" href="#brute-force-search-_find_best_models_brute_force" title="Permanent link">&para;</a></h3>
+<h4 id="methodology">Methodology<a class="headerlink" href="#methodology" title="Permanent link">&para;</a></h4>
+<p>This is the most straightforward and exhaustive approach. It systematically evaluates every possible combination of <span class="arithmatex">\(D\)</span> features from the pool of <span class="arithmatex">\(M\)</span> candidates.
+1.  For a given dimension <span class="arithmatex">\(D\)</span>, generate all <span class="arithmatex">\(\binom{M}{D}\)</span> unique combinations of features.
+2.  For each combination, form a feature matrix <span class="arithmatex">\(X_D\)</span>.
+3.  Fit an Ordinary Least Squares (OLS) regression model to find the coefficients <span class="arithmatex">\(\beta\)</span>.
     $$
-    \beta = X_D^\dagger \mathbf{y} \quad \text{(pseudo-inverse in case $X_D$ is rank-deficient)}
+    \beta = X_D^\dagger \mathbf{y} \quad \text{(pseudo-inverse in case <span class="arithmatex">\(X_D\)</span> is rank-deficient)}
     $$
 4.  Calculate the error of this model, typically the Root Mean Squared Error (RMSE).
     $$
     \text{RMSE} = \sqrt{\frac{1}{n} \sum_{i=1}^{n} (y_i - \hat{y}_i)^2} = \sqrt{\frac{1}{n} |\mathbf{y} - X_D\beta|_2^2}
     $$
-5.  The combination that yields the minimum RMSE is selected as the best model for dimension $D$.</p>
-<h4 id="application-in-symbolic-regression">Application in Symbolic Regression</h4>
-<p>This method guarantees finding the globally optimal set of $D$ symbolic features from the selected screened pool. However, its computational cost, $O(\binom{M}{D})$, makes it practical only for very small $M$ and $D$.</p>
-<h3 id="greedy-search-_find_best_models_greedy">Greedy Search (<code>_find_best_models_greedy</code>)</h3>
-<h4 id="methodology_1">Methodology</h4>
+5.  The combination that yields the minimum RMSE is selected as the best model for dimension <span class="arithmatex">\(D\)</span>.</p>
+<h4 id="application-in-symbolic-regression">Application in Symbolic Regression<a class="headerlink" href="#application-in-symbolic-regression" title="Permanent link">&para;</a></h4>
+<p>This method guarantees finding the globally optimal set of <span class="arithmatex">\(D\)</span> symbolic features from the selected screened pool. However, its computational cost, <span class="arithmatex">\(O(\binom{M}{D})\)</span>, makes it practical only for very small <span class="arithmatex">\(M\)</span> and <span class="arithmatex">\(D\)</span>.</p>
+<h3 id="greedy-search-_find_best_models_greedy">Greedy Search (<code>_find_best_models_greedy</code>)<a class="headerlink" href="#greedy-search-_find_best_models_greedy" title="Permanent link">&para;</a></h3>
+<h4 id="methodology_1">Methodology<a class="headerlink" href="#methodology_1" title="Permanent link">&para;</a></h4>
 <p>This is a forward selection algorithm that builds the model one feature at a time. It is computationally efficient, but may not find the global optimum.
-1.  <strong>Dimension 1:</strong> Find the single best feature $\Phi_1^<em>$ by fitting $M$ separate 1D models. The feature with the lowest error is selected.
+1.  <strong>Dimension 1:</strong> Find the single best feature <span class="arithmatex">\(\Phi_1^*\)</span> by fitting <span class="arithmatex">\(M\)</span> separate 1D models. The feature with the lowest error is selected.
     $$
-    \Phi_1^</em> = \underset{\Phi_j \in \Phi}{\text{argmin}} \left( \min_{\beta_0, \beta_j} |\mathbf{y} - (\beta_0 + \beta_j \Phi_j)|_2^2 \right)
+    \Phi_1^<em> = \underset{\Phi_j \in \Phi}{\text{argmin}} \left( \min_{\beta_0, \beta_j} |\mathbf{y} - (\beta_0 + \beta_j \Phi_j)|_2^2 \right)
     $$
-2.  <strong>Dimension 2:</strong> Keep $\Phi_1^<em>$ fixed. Search through all remaining $M-1$ features to find the second feature $\Phi_2^</em>$ that, when combined with $\Phi_1^<em>$, yields the best 2D model.
+2.  </em><em>Dimension 2:</em><em> Keep <span class="arithmatex">\(\Phi_1^*\)</span> fixed. Search through all remaining <span class="arithmatex">\(M-1\)</span> features to find the second feature <span class="arithmatex">\(\Phi_2^*\)</span> that, when combined with <span class="arithmatex">\(\Phi_1^*\)</span>, yields the best 2D model.
     $$
     \Phi_2^</em> = \underset{\Phi_j \in \Phi \setminus {\Phi_1^<em>}}{\text{argmin}} \left( \min_{\beta_0, \beta_1, \beta_j} |\mathbf{y} - (\beta_0 + \beta_1 \Phi_1^</em> + \beta_j \Phi_j)|_2^2 \right)
     $$
-3.  <strong>Dimension D:</strong> Continue this process, adding one feature at each step that provides the greatest improvement to the existing model, until a $D$-dimensional model is constructed.</p>
-<h4 id="application-in-symbolic-regression_1">Application in Symbolic Regression</h4>
+3.  <strong>Dimension D:</strong> Continue this process, adding one feature at each step that provides the greatest improvement to the existing model, until a <span class="arithmatex">\(D\)</span>-dimensional model is constructed.</p>
+<h4 id="application-in-symbolic-regression_1">Application in Symbolic Regression<a class="headerlink" href="#application-in-symbolic-regression_1" title="Permanent link">&para;</a></h4>
 <p>The greedy search quickly identifies a good, but not necessarily optimal, combination of symbolic features. In each step, it selects the symbolic expression that best explains the variance <em>not already explained</em> by the previously selected features.</p>
-<h3 id="orthogonal-matching-pursuit-omp-_find_best_models_omp">Orthogonal Matching Pursuit (OMP) (<code>_find_best_models_omp</code>)</h3>
-<h4 id="methodology_2">Methodology</h4>
+<h3 id="orthogonal-matching-pursuit-omp-_find_best_models_omp">Orthogonal Matching Pursuit (OMP) (<code>_find_best_models_omp</code>)<a class="headerlink" href="#orthogonal-matching-pursuit-omp-_find_best_models_omp" title="Permanent link">&para;</a></h3>
+<h4 id="methodology_2">Methodology<a class="headerlink" href="#methodology_2" title="Permanent link">&para;</a></h4>
 <p>OMP is a more robust version of the greedy algorithm. Instead of just adding the next best feature, it recalculates the coefficients for all selected features at each step.
-1.  Initialize the residual $\mathbf{r}<em>0 = \mathbf{y}$ and the selected feature set $\mathcal{S}_0 = \emptyset$.
-2.  For $k=1, \dots, D$:
-    1.  Find the feature $\Phi_k^<em>$ from the remaining pool that is most correlated with the current residual $\mathbf{r}_{k-1}$.
+1.  Initialize the residual <span class="arithmatex">\(\mathbf{r}_0 = \mathbf{y}\)</span> and the selected feature set <span class="arithmatex">\(\mathcal{S}_0 = \emptyset\)</span>.
+2.  For <span class="arithmatex">\(k=1, \dots, D\)</span>:
+    1.  Find the feature <span class="arithmatex">\(\Phi_k^*\)</span> from the remaining pool that is most correlated with the current residual <span class="arithmatex">\(\mathbf{r}_{k-1}\)</span>.
         $$
-        \Phi_k^</em> = \underset{\Phi_j \notin \mathcal{S}</em>{k-1}}{\text{argmax}} \left| \langle \mathbf{r}<em>{k-1}, \Phi_j \rangle \right|
+        \Phi_k^* = \underset{\Phi_j \notin \mathcal{S}<em>{k-1}}{\text{argmax}} \left| \langle \mathbf{r}</em>{k-1}, \Phi_j \rangle \right|
         $$
-    2.  Add the selected feature to the active set: $\mathcal{S}_k = \mathcal{S}</em>{k-1} \cup {\Phi_k^*}$.
-    3.  Solve a least-squares problem to find the new coefficients $\beta_k$ using all features currently in the active set $\mathcal{S}<em>k$.
+    2.  Add the selected feature to the active set: <span class="arithmatex">\(\mathcal{S}_k = \mathcal{S}_{k-1} \cup \{\Phi_k^*\}\)</span>.
+    3.  Solve a least-squares problem to find the new coefficients <span class="arithmatex">\(\beta_k\)</span> using all features currently in the active set <span class="arithmatex">\(\mathcal{S}_k\)</span>.
         $$
-        \beta_k = \Phi</em>{\mathcal{S}<em>k}^\dagger \mathbf{y} \quad \text{(least-squares solution / pseudo-inverse)}
+        \beta_k = \Phi_{\mathcal{S}<em>k}^\dagger \mathbf{y} \quad \text{(least-squares solution / pseudo-inverse)}
         $$
     4.  Update the residual for the next iteration.
         $$
         \mathbf{r}_k = \mathbf{y} - \Phi</em>{\mathcal{S}_k} \beta_k
         $$</p>
-<h4 id="application-in-symbolic-regression_2">Application in Symbolic Regression</h4>
+<h4 id="application-in-symbolic-regression_2">Application in Symbolic Regression<a class="headerlink" href="#application-in-symbolic-regression_2" title="Permanent link">&para;</a></h4>
 <p>OMP provides a more stable path to a solution than a simple greedy search. By re-fitting the entire model at each step, it better accounts for correlations between the selected symbolic features, often leading to a more physically meaningful final equation.</p>
-<h3 id="sisso-breadth-first-qr-search-_find_best_models_sisso_pp">SISSO++ (Breadth-First QR Search) (<code>_find_best_models_sisso_pp</code>)</h3>
-<h4 id="methodology_3">Methodology</h4>
+<h3 id="sisso-breadth-first-qr-search-_find_best_models_sisso_pp">SISSO++ (Breadth-First QR Search) (<code>_find_best_models_sisso_pp</code>)<a class="headerlink" href="#sisso-breadth-first-qr-search-_find_best_models_sisso_pp" title="Permanent link">&para;</a></h3>
+<h4 id="methodology_3">Methodology<a class="headerlink" href="#methodology_3" title="Permanent link">&para;</a></h4>
 <p>This is a highly efficient breadth-first search algorithm that avoids the combinatorial explosion of brute-force by using linear algebra updates. It keeps a "beam" of the best-performing models at each dimension.
-1.  <strong>Dimension 1:</strong> Evaluate all 1D models and retain the top $N_{\text{beam}}$ models with the lowest RSS.
-2.  <strong>Dimension 2:</strong> For each of the $N_{\text{beam}}$ models from D=1, try adding every other available feature.
-3.  <strong>The QR Update:</strong> The key to its efficiency is using QR decomposition. If we have the decomposition for a feature set $X_D = Q_D R_D$, the RSS is easily calculated:
+1.  <strong>Dimension 1:</strong> Evaluate all 1D models and retain the top <span class="arithmatex">\(N_{\text{beam}}\)</span> models with the lowest RSS.
+2.  <strong>Dimension 2:</strong> For each of the <span class="arithmatex">\(N_{\text{beam}}\)</span> models from D=1, try adding every other available feature.
+3.  <strong>The QR Update:</strong> The key to its efficiency is using QR decomposition. If we have the decomposition for a feature set <span class="arithmatex">\(X_D = Q_D R_D\)</span>, the RSS is easily calculated:
     $$
     \text{RSS}<em>D = |\mathbf{y}|_2^2 - |Q_D^T \mathbf{y}|_2^2
     $$
-    To find the RSS for a new model with an added feature $\mathbf{x}</em>{\text{new}}$, we don't refit. Instead, we compute the component of $\mathbf{x}<em>{\text{new}}$ orthogonal to the space spanned by $Q_D$:
+    To find the RSS for a new model with an added feature <span class="arithmatex">\(\mathbf{x}_{\text{new}}\)</span>, we don't refit. Instead, we compute the component of <span class="arithmatex">\(\mathbf{x}_{\text{new}}\)</span> orthogonal to the space spanned by <span class="arithmatex">\(Q_D\)</span>:
     $$
     \mathbf{w}</em>{\text{new}} = \mathbf{x}<em>{\text{new}} - Q_D Q_D^T \mathbf{x}</em>{\text{new}}
     $$
     The reduction in RSS is then calculated directly:
     $$
-    \Delta \text{RSS} = \frac{(\mathbf{r}<em>D^T \mathbf{w}</em>{\text{new}})^2}{|\mathbf{w}<em>{\text{new}}|_2^2}
+    \Delta \text{RSS} = \frac{(\mathbf{r}<em>D^T \mathbf{w}</em>{\text{new}})^2}{|\mathbf{w}_{\text{new}}|_2^2}
     $$
-    where $\mathbf{r}_D = \mathbf{y} - Q_D Q_D^T \mathbf{y}$ is the residual.
-4.  A new beam of the top $N</em>{\text{beam}}$ 2D models is created, and the process repeats for $D=3, \dots, D_{\text{max}}$.</p>
-<h4 id="application-in-symbolic-regression_3">Application in Symbolic Regression</h4>
+    where <span class="arithmatex">\(\mathbf{r}_D = \mathbf{y} - Q_D Q_D^T \mathbf{y}\)</span> is the residual.
+4.  A new beam of the top <span class="arithmatex">\(N_{\text{beam}}\)</span> 2D models is created, and the process repeats for <span class="arithmatex">\(D=3, \dots, D_{\text{max}}\)</span>.</p>
+<h4 id="application-in-symbolic-regression_3">Application in Symbolic Regression<a class="headerlink" href="#application-in-symbolic-regression_3" title="Permanent link">&para;</a></h4>
 <p>SISSO++ explores a much wider range of feature combinations than a simple greedy search without incurring the cost of brute-force. It is highly effective at finding high-quality, low-dimensional symbolic models that might be missed by a purely sequential greedy approach.</p>
-<h3 id="random-mutation-hill-climbing-rmhc-simulated-annealing-sa">Random Mutation Hill Climbing (RMHC) &amp; Simulated Annealing (SA)</h3>
-<h4 id="methodology_4">Methodology</h4>
+<h3 id="random-mutation-hill-climbing-rmhc-simulated-annealing-sa">Random Mutation Hill Climbing (RMHC) &amp; Simulated Annealing (SA)<a class="headerlink" href="#random-mutation-hill-climbing-rmhc-simulated-annealing-sa" title="Permanent link">&para;</a></h3>
+<h4 id="methodology_4">Methodology<a class="headerlink" href="#methodology_4" title="Permanent link">&para;</a></h4>
 <p>These are stochastic heuristic search algorithms that explore the solution space by making random changes to a candidate model.
 *   <strong>RMHC (<code>_find_best_models_rmhc</code>):</strong>
-    1.  Start with a good initial $D$-dimensional model (e.g., from a greedy search).
+    1.  Start with a good initial <span class="arithmatex">\(D\)</span>-dimensional model (e.g., from a greedy search).
     2.  In each iteration, randomly swap one feature in the current model with one feature from the outside pool.
     3.  If the new model has a lower error (is "uphill"), accept the change.
     4.  If the new model is worse, reject the change and keep the old model.
     5.  Repeat for many iterations. Multiple restarts from the best-so-far solution help avoid local optima.
 *   <strong>SA (<code>_find_best_models_sa</code>):</strong>
-    SA is similar to RMHC, but with a crucial difference: it can accept "downhill" moves (worse solutions) to escape local optima. The probability of accepting a worse solution with error increase $\Delta E$ is given by the Metropolis criterion:
+    SA is similar to RMHC, but with a crucial difference: it can accept "downhill" moves (worse solutions) to escape local optima. The probability of accepting a worse solution with error increase <span class="arithmatex">\(\Delta E\)</span> is given by the Metropolis criterion:
     $$
     P(\text{accept}) = e^{-\frac{\Delta E}{T}}
     $$
-    where $T$ is a "temperature" parameter that starts high (allowing many bad moves) and is gradually decreased (the "annealing schedule"), making the search converge towards a good solution.</p>
-<h4 id="application-in-symbolic-regression_4">Application in Symbolic Regression</h4>
-<p>These methods are excellent for refining a model found by a faster method like a greedy search. They can escape the local optima that greedy methods are prone to, potentially swapping out a feature for another that, while worse on its own, enables a much better overall model when combined with the other $D-1$ features.</p>
-<h3 id="mixed-integer-quadratic-programming-miqp-_find_best_models_miqp">Mixed-Integer Quadratic Programming (MIQP) (<code>_find_best_models_miqp</code>)</h3>
-<h4 id="methodology_5">Methodology</h4>
-<p>This method provides a mathematically rigorous, exact solution to the $L_0$ problem. It recasts the problem into a format that can be solved by specialized solvers like Gurobi.
+    where <span class="arithmatex">\(T\)</span> is a "temperature" parameter that starts high (allowing many bad moves) and is gradually decreased (the "annealing schedule"), making the search converge towards a good solution.</p>
+<h4 id="application-in-symbolic-regression_4">Application in Symbolic Regression<a class="headerlink" href="#application-in-symbolic-regression_4" title="Permanent link">&para;</a></h4>
+<p>These methods are excellent for refining a model found by a faster method like a greedy search. They can escape the local optima that greedy methods are prone to, potentially swapping out a feature for another that, while worse on its own, enables a much better overall model when combined with the other <span class="arithmatex">\(D-1\)</span> features.</p>
+<h3 id="mixed-integer-quadratic-programming-miqp-_find_best_models_miqp">Mixed-Integer Quadratic Programming (MIQP) (<code>_find_best_models_miqp</code>)<a class="headerlink" href="#mixed-integer-quadratic-programming-miqp-_find_best_models_miqp" title="Permanent link">&para;</a></h3>
+<h4 id="methodology_5">Methodology<a class="headerlink" href="#methodology_5" title="Permanent link">&para;</a></h4>
+<p>This method provides a mathematically rigorous, exact solution to the <span class="arithmatex">\(L_0\)</span> problem. It recasts the problem into a format that can be solved by specialized solvers like Gurobi.
 1.  <strong>Variables:</strong> Define two sets of variables:
-    *   Continuous variables $\beta_j$ for the coefficients.
-    *   Binary variables $z_j \in {0, 1}$, where $z_j = 1$ if feature $\Phi_j$ is included in the model, and $0$ otherwise.
-2.  <strong>Objective Function:</strong> Minimize the RSS, which is a quadratic function of $\beta$.
+    *   Continuous variables <span class="arithmatex">\(\beta_j\)</span> for the coefficients.
+    *   Binary variables <span class="arithmatex">\(z_j \in \{0, 1\}\)</span>, where <span class="arithmatex">\(z_j = 1\)</span> if feature <span class="arithmatex">\(\Phi_j\)</span> is included in the model, and <span class="arithmatex">\(0\)</span> otherwise.
+2.  <strong>Objective Function:</strong> Minimize the RSS, which is a quadratic function of <span class="arithmatex">\(\beta\)</span>.
     $$
     \min_{\beta, \mathbf{z}} \quad (\mathbf{y} - \Phi\beta)^T (\mathbf{y} - \Phi\beta)  \quad \equiv \quad  \min_{\beta, \mathbf{z}} \quad \beta^T (\Phi^T\Phi) \beta - 2(\mathbf{y}^T\Phi)\beta + \mathbf{y}^T \mathbf{y}
     $$
 3.  <strong>Constraints:</strong>
-    *   The <strong>Cardinality Constraint</strong> directly enforces the $L_0$ norm:
+    *   The <strong>Cardinality Constraint</strong> directly enforces the <span class="arithmatex">\(L_0\)</span> norm:
         $$
         \sum_{j=1}^{M} z_j = D
         $$
-    *   The <strong>Big-M Constraints</strong> link the binary and continuous variables. They ensure that if a feature is not selected ($z_j=0$), its coefficient must also be zero ($\beta_j=0$).
+    *   The <strong>Big-M Constraints</strong> link the binary and continuous variables. They ensure that if a feature is not selected (<span class="arithmatex">\(z_j=0\)</span>), its coefficient must also be zero (<span class="arithmatex">\(\beta_j=0\)</span>).
         $$
         -M \cdot z_j \le \beta_j \le M \cdot z_j \quad \text{for } j=1, \dots, M
         $$
-        where $M$ is a sufficiently large constant (an upper bound on any possible coefficient value).</p>
-<h4 id="application-in-symbolic-regression_5">Application in Symbolic Regression</h4>
-<p>When applicable (for regression with $L_2$ loss) and computationally feasible, MIQP is the gold standard. It guarantees that the selected combination of $D$ symbolic features is the provably optimal one from the entire candidate pool, leaving no doubt that a better linear combination of $D$ features exists.</p>
-<h3 id="geometric-greedy-search-_find_best_models_ch_greedy">Geometric Greedy Search (<code>_find_best_models_ch_greedy</code>)</h3>
-<h4 id="methodology_6">Methodology</h4>
+        where <span class="arithmatex">\(M\)</span> is a sufficiently large constant (an upper bound on any possible coefficient value).</p>
+<h4 id="application-in-symbolic-regression_5">Application in Symbolic Regression<a class="headerlink" href="#application-in-symbolic-regression_5" title="Permanent link">&para;</a></h4>
+<p>When applicable (for regression with <span class="arithmatex">\(L_2\)</span> loss) and computationally feasible, MIQP is the gold standard. It guarantees that the selected combination of <span class="arithmatex">\(D\)</span> symbolic features is the provably optimal one from the entire candidate pool, leaving no doubt that a better linear combination of <span class="arithmatex">\(D\)</span> features exists.</p>
+<h3 id="geometric-greedy-search-_find_best_models_ch_greedy">Geometric Greedy Search (<code>_find_best_models_ch_greedy</code>)<a class="headerlink" href="#geometric-greedy-search-_find_best_models_ch_greedy" title="Permanent link">&para;</a></h3>
+<h4 id="methodology_6">Methodology<a class="headerlink" href="#methodology_6" title="Permanent link">&para;</a></h4>
 <p>This is a specialized greedy search for the <code>ch_classification</code> task. The scoring function is not RMSE but a geometric measure of class separability.
-1.  At each dimension $D$, the goal is to add a new feature that minimizes the overlap between the convex hulls of the different classes in the $D$-dimensional descriptor space.
+1.  At each dimension <span class="arithmatex">\(D\)</span>, the goal is to add a new feature that minimizes the overlap between the convex hulls of the different classes in the <span class="arithmatex">\(D\)</span>-dimensional descriptor space.
 2.  The overlap is estimated using <strong>Monte Carlo integration</strong>:
     1.  A large number of random points are sampled within the bounding box of the data.
     2.  For each point, determine how many class hulls it falls inside.
@@ -1173,12 +1173,12 @@ $$</p>
         \text{Overlap Fraction} = \frac{\text{Points in } \ge 2 \text{ hulls}}{\text{Points in } \ge 1 \text{ hull}}
         $$
 3.  The search proceeds greedily, selecting the feature at each step that results in the lowest overlap fraction.</p>
-<h4 id="application-in-symbolic-regression_6">Application in Symbolic Regression</h4>
+<h4 id="application-in-symbolic-regression_6">Application in Symbolic Regression<a class="headerlink" href="#application-in-symbolic-regression_6" title="Permanent link">&para;</a></h4>
 <p>This method finds a set of symbolic features that transform the original data into a new space where the different classes are maximally separable by geometric boundaries (convex hulls). The resulting "formula" is not a single equation for a property, but a set of coordinate transformations (the descriptors) that define this optimal classification space.</p>
-<h2 id="post-search-non-linear-refinement-_refine_model_with_nlopt">Post-Search: Non-Linear Refinement (<code>_refine_model_with_nlopt</code>)</h2>
+<h2 id="post-search-non-linear-refinement-_refine_model_with_nlopt">Post-Search: Non-Linear Refinement (<code>_refine_model_with_nlopt</code>)<a class="headerlink" href="#post-search-non-linear-refinement-_refine_model_with_nlopt" title="Permanent link">&para;</a></h2>
 <p>After a linear model has been identified by one of the search methods, this optional step can refine it by introducing non-linear parameters.
-*   <strong>Methodology:</strong> It takes a discovered linear model, such as $y \approx \beta_0 + \beta_1 \Phi_1 + \beta_2 \Phi_2$, and tests if replacing a descriptor $\Phi_i$ with a parameterized version, like $e^{-p \Phi_i}$ or $\Phi_i^p$, can improve the fit.
-*   It uses a numerical optimization algorithm (L-BFGS-B) to simultaneously find the optimal values for the linear coefficients ($\beta_i$) and the new non-linear parameters ($p$). The objective function remains the RMSE.
+*   <strong>Methodology:</strong> It takes a discovered linear model, such as <span class="arithmatex">\(y \approx \beta_0 + \beta_1 \Phi_1 + \beta_2 \Phi_2\)</span>, and tests if replacing a descriptor <span class="arithmatex">\(\Phi_i\)</span> with a parameterized version, like <span class="arithmatex">\(e^{-p \Phi_i}\)</span> or <span class="arithmatex">\(\Phi_i^p\)</span>, can improve the fit.
+*   It uses a numerical optimization algorithm (L-BFGS-B) to simultaneously find the optimal values for the linear coefficients (<span class="arithmatex">\(\beta_i\)</span>) and the new non-linear parameters (<span class="arithmatex">\(p\)</span>). The objective function remains the RMSE.
 *   <strong>Application in Symbolic Regression:</strong> This allows DISCOVER to find even more complex and accurate formulas that are not purely linear combinations of the base descriptors, such as discovering optimal exponents or decay constants within the final equation.</p>
 
 

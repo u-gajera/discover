@@ -9,7 +9,7 @@
         <meta name="description" content="Symbolic Regression for Science">
       
       
-        <meta name="author" content="Your Name / Your Team">
+        <meta name="author" content="Uday Gajera, Mohsen Sotoudeh">
       
       
       
@@ -624,82 +624,84 @@
   
 
 
-<h1 id="getting-started-a-step-by-step-tutorial">Getting Started: A Step-by-Step Tutorial</h1>
+<h1 id="getting-started-a-step-by-step-tutorial">Getting Started: A Step-by-Step Tutorial<a class="headerlink" href="#getting-started-a-step-by-step-tutorial" title="Permanent link">&para;</a></h1>
 <p>This tutorial will guide you through your first analysis using DISCOVER. We will go through installation, data preparation, configuration, execution, and interpretation of the output. We will take <code>config.json</code> as an example.</p>
-<h3 id="step-1-installation">Step 1: Installation</h3>
+<h3 id="step-1-installation">Step 1: Installation<a class="headerlink" href="#step-1-installation" title="Permanent link">&para;</a></h3>
 <p>Ensure you have Python 3.8+ installed. It is strongly advised to use a virtual environment.</p>
 <ol>
-<li><strong>Clone the Repository:</strong></li>
-</ol>
-<pre><code class="language-bash">git clone &lt;your-repository-url&gt;
-cd discover-project
-</code></pre>
-<ol>
-<li><strong>Activate a Virtual Environment:</strong></li>
-</ol>
-<pre><code class="language-bash">    python -m venv venv
-    source venv/bin/activate  # On Windows, use `venv\\\\Scripts\\\\activate`
-</code></pre>
-<ol>
-<li><strong>Install Core Dependencies:</strong></li>
-</ol>
-<pre><code class="language-bash">    pip install pandas numpy sympy scikit-learn matplotlib seaborn joblib
-</code></pre>
-<ol>
-<li><strong>Install Optional Dependencies (Optional):</strong><ul>
+<li>
+<p><strong>Clone the Repository:</strong>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>clone<span class="w"> </span>&lt;your-repository-url&gt;
+<span class="nb">cd</span><span class="w"> </span>discover-project
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Activate a Virtual Environment:</strong>
+<div class="highlight"><pre><span></span><code><span class="w">    </span>python<span class="w"> </span>-m<span class="w"> </span>venv<span class="w"> </span>venv
+<span class="w">    </span><span class="nb">source</span><span class="w"> </span>venv/bin/activate<span class="w">  </span><span class="c1"># On Windows, use `venv\\\\Scripts\\\\activate`</span>
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Install Core Dependencies:</strong>
+<div class="highlight"><pre><span></span><code><span class="w">    </span>pip<span class="w"> </span>install<span class="w"> </span>pandas<span class="w"> </span>numpy<span class="w"> </span>sympy<span class="w"> </span>scikit-learn<span class="w"> </span>matplotlib<span class="w"> </span>seaborn<span class="w"> </span>joblib
+</code></pre></div></p>
+</li>
+<li>
+<p><strong>Install Optional Dependencies (Optional):</strong></p>
+<ul>
 <li><strong>For GPU Acceleration (NVIDIA):</strong>
-    <code>bash
-    # Put XX in place of your CUDA version (e.g., 118 for CUDA 11.8)
-    pip install cupy-cudaXX</code></li>
+    <div class="highlight"><pre><span></span><code><span class="c1"># Put XX in place of your CUDA version (e.g., 118 for CUDA 11.8)</span>
+pip<span class="w"> </span>install<span class="w"> </span>cupy-cudaXX
+</code></pre></div></li>
 </ul>
 </li>
 <li><strong>For GPU Acceleration (Apple Silicon):</strong>
-        <code>bash
-        pip install torch torchvision torchaudio</code><ul>
+        <div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>torch<span class="w"> </span>torchvision<span class="w"> </span>torchaudio
+</code></pre></div><ul>
 <li><strong>For Unit-Awareness:</strong>
-    <code>bash
-    pip install pint</code></li>
+    <div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>pint
+</code></pre></div></li>
 </ul>
 </li>
 </ol>
-<h3 id="step-2-prepare-your-data">Step 2: Prepare Your Data</h3>
+<h3 id="step-2-prepare-your-data">Step 2: Prepare Your Data<a class="headerlink" href="#step-2-prepare-your-data" title="Permanent link">&para;</a></h3>
 <p>DISCOVER expects your data in a single <strong>CSV file</strong>.
 -   Each row should be an example (e.g., a material or a data point).
 -   Each column should be a primary feature or the target property.</p>
 <p>For our case, <code>sample_dataset.csv</code> contains columns for main features like <code>R_A</code> (ionic radius), <code>ELN_A</code> (electronegativity), and target property <code>E_a</code> (migration barrier).</p>
-<h3 id="step-3-prepare-the-analysis">Step 3: Prepare the Analysis</h3>
+<h3 id="step-3-prepare-the-analysis">Step 3: Prepare the Analysis<a class="headerlink" href="#step-3-prepare-the-analysis" title="Permanent link">&para;</a></h3>
 <p>The workflow is managed by <code>config.json</code>. Let's break down the critical parts for an initial run.</p>
-<pre><code class="language-json">{
-    // 1. DATA &amp; I/O
-    &quot;data_file&quot;: &quot;manuel_data.csv&quot;,
-    &quot;property_key&quot;: &quot;E_a&quot;,
-    &quot;non_feature_cols&quot;: [&quot;Name&quot;, &quot;Delta_E&quot;, &quot;.&quot;],
-},
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">    </span><span class="c1">// 1. DATA &amp; I/O</span>
+<span class="w">    </span><span class="nt">&quot;data_file&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;manuel_data.csv&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;property_key&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;E_a&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;non_feature_cols&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;Name&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;Delta_E&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;.&quot;</span><span class="p">],</span>
+<span class="p">},</span>
 
-&quot;workdir&quot;: &quot;manuel_data&quot;,
+<span class="nt">&quot;workdir&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;manuel_data&quot;</span><span class="p">,</span>
 
-    // 2. FEATURE CONSTRUCTION
-    &quot;depth&quot;: 3,
-    &quot;op_rules&quot;: [
-      {&quot;op&quot;: &quot;add&quot;}, {&quot;op&quot;: &quot;sub&quot;}, {&quot;op&quot;: &quot;mul&quot;}, {&quot;op&quot;: &quot;div&quot;},
-      {&quot;op&quot;: &quot;sqrt&quot;}, {&quot;op&quot;: &quot;sq&quot;}
-    ],
+<span class="w">    </span><span class="c1">// 2. FEATURE CONSTRUCTION</span>
+<span class="w">    </span><span class="nt">&quot;depth&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">3</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;op_rules&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">      </span><span class="p">{</span><span class="nt">&quot;op&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;add&quot;</span><span class="p">},</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;op&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sub&quot;</span><span class="p">},</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;op&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;mul&quot;</span><span class="p">},</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;op&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;div&quot;</span><span class="p">},</span>
+<span class="w">      </span><span class="p">{</span><span class="nt">&quot;op&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sqrt&quot;</span><span class="p">},</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;op&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sq&quot;</span><span class="p">}</span>
+<span class="w">    </span><span class="p">],</span>
 
-    // 3. SEARCH &amp; SELECTION
-    &quot;max_D&quot;: 2,
-    &quot;search_strategy&quot;: &quot;sa&quot;,
-&quot;selection_method&quot;: &quot;bic&quot;,
+<span class="w">    </span><span class="c1">// 3. SEARCH &amp; SELECTION</span>
+<span class="w">    </span><span class="nt">&quot;max_D&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">2</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;search_strategy&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sa&quot;</span><span class="p">,</span>
+<span class="nt">&quot;selection_method&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;bic&quot;</span><span class="p">,</span>
 
-    // 4. MODEL &amp; VALIDATION
-    &quot;task_type&quot;: &quot;regression&quot;,
-    &quot;fix_intercept&quot;: false,
+<span class="w">    </span><span class="c1">// 4. MODEL &amp; VALIDATION</span>
+<span class="w">    </span><span class="nt">&quot;task_type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;regression&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;fix_intercept&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
 
-    // 5. COMPUTATIONAL
-    &quot;n_jobs&quot;: -1,
-    &quot;device&quot;: &quot;cpu&quot;,
-    &quot;random_state&quot;: 42
-}
-</code></pre>
+<span class="w">    </span><span class="c1">// 5. COMPUTATIONAL</span>
+<span class="w">    </span><span class="nt">&quot;n_jobs&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">-1</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;device&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;cpu&quot;</span><span class="p">,</span>
+<span class="w">    </span><span class="nt">&quot;random_state&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">42</span>
+<span class="p">}</span>
+</code></pre></div>
 <ul>
 <li><strong><code>data_file</code></strong>: Path to your input CSV.</li>
 <li><strong><code>property_key</code></strong>: The exact name of the target column in your CSV.</li>
@@ -711,10 +713,10 @@ cd discover-project
 <li><strong><code>selection_method</code></strong>: The criterion to select the best dimension. <code>cv</code> (Cross-Validation) is stable, but <code>bic</code> (Bayesian Information Criterion) penalizes model complexity.</li>
 <li><strong><code>task_type</code></strong>: The machine learning task type. <code>regression</code> is used for continuous values.</li>
 </ul>
-<h3 id="step-4-run-the-analysis">Step 4: Run the Analysis</h3>
+<h3 id="step-4-run-the-analysis">Step 4: Run the Analysis<a class="headerlink" href="#step-4-run-the-analysis" title="Permanent link">&para;</a></h3>
 <p>With your configuration set, execute the <code>run_discover.py</code> script in your command line:</p>
-<pre><code class="language-bash">python run_discover.py config.json
-</code></pre>
+<div class="highlight"><pre><span></span><code>python<span class="w"> </span>run_discover.py<span class="w"> </span>config.json
+</code></pre></div>
 <p>DISCOVER will start, giving live output on how it's proceeding:
 1.  Loading data and config.
 2.  Creating features iteratively, reporting at each <code>depth</code>.
@@ -722,11 +724,11 @@ cd discover-project
 4.  Executing the selected search strategy for each dimension <code>D</code>.
 5.  Checking the models and selecting the best dimension.
 6. Printing the final summary report to the console.</p>
-<h3 id="step-5-understanding-the-output">Step 5: Understanding the Output</h3>
+<h3 id="step-5-understanding-the-output">Step 5: Understanding the Output<a class="headerlink" href="#step-5-understanding-the-output" title="Permanent link">&para;</a></h3>
 <p>All output is saved to the directory specified by <code>workdir</code> (e.g., <code>manuel_data/</code>).</p>
 <p><strong>Key Console Output:</strong>
-The final part of the console output is the summary report, the most important takeaway:</p>
-<pre><code>========================= FINAL MODEL REPORT =========================
+The final part of the console output is the summary report, the most important takeaway:
+<div class="highlight"><pre><span></span><code>========================= FINAL MODEL REPORT =========================
 DISCOVER Summary
 =================
 TASK_TYPE: regression
@@ -743,14 +745,14 @@ R2/Accuracy on full data: 0.9512
 Final Symbolic Model: regression
 ============================================================
 P = -0.1234 + 0.5678*sqrt(R_A/R_B) + 0.9012*Abs(ELN_A - ELN_B)
-</code></pre>
+</code></pre></div></p>
 <p><strong>Important Files in the <code>workdir</code>:</strong>
 -   <code>discover.out</code>: A text file with the same exhaustive summary report to the console.
 -   <code>final_models_summary.json</code>: A machine-readable JSON file providing exhaustive detail regarding the top discovered model for each dimension, including coefficients and feature expressions.
 -   <code>top_sis_candidates.csv</code>: A CSV file ranking the best individual features (1D models) discovered, and worth examining which top features are most effective.
 -   <code>plots/</code>: A folder of automatically generated plots, such as the model selection score plot (<code>selection_scores.png</code>).
 -   <code>models/</code>: Contains detailed text files for each model dimension (<code>model_D01.dat</code>, <code>model_D02.dat</code>, etc.).</p>
-<h3 id="whats-next">What's Next?</h3>
+<h3 id="whats-next">What's Next?<a class="headerlink" href="#whats-next" title="Permanent link">&para;</a></h3>
 <p>Congratulations! You've successfully executed your first DISCOVER analysis. You now possess an interpretable, symbolic model that describes your data.</p>
 <p>For exploring more sophisticated features, check out our <strong><a href="../howto/">How-To Guides</a></strong>, where you can observe how to:
 -   Execute DISCOVER programmatically inside a Python program.

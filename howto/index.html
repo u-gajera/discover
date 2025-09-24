@@ -9,7 +9,7 @@
         <meta name="description" content="Symbolic Regression for Science">
       
       
-        <meta name="author" content="Your Name / Your Team">
+        <meta name="author" content="Uday Gajera, Mohsen Sotoudeh">
       
       
       
@@ -624,93 +624,89 @@
   
 
 
-<h1 id="how-to-guides">How-To Guides</h1>
+<h1 id="how-to-guides">How-To Guides<a class="headerlink" href="#how-to-guides" title="Permanent link">&para;</a></h1>
 <p>This section provides practical, task-oriented guides for users who want to leverage the advanced features of DISCOVER.</p>
 <hr />
-<h3 id="how-to-use-discover-in-a-python-script-or-notebook">How to Use DISCOVER in a Python Script or Notebook</h3>
+<h3 id="how-to-use-discover-in-a-python-script-or-notebook">How to Use DISCOVER in a Python Script or Notebook<a class="headerlink" href="#how-to-use-discover-in-a-python-script-or-notebook" title="Permanent link">&para;</a></h3>
 <p>While the <code>run_discover.py</code> script is convenient, you can get more flexibility by using the DISCOVER classes directly in Python. This allows for easier integration into larger workflows and custom analysis.</p>
-<pre><code class="language-python">import pandas as pd
-from discover import DiscoverRegressor, print_descriptor_formula
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">discover</span><span class="w"> </span><span class="kn">import</span> <span class="n">DiscoverRegressor</span><span class="p">,</span> <span class="n">print_descriptor_formula</span>
 
-# 1. Load your data
-data = pd.read_csv(&quot;manuel_data.csv&quot;)
-y = data[&quot;E_a&quot;]
-X = data.drop(columns=[&quot;E_a&quot;, &quot;Name&quot;, &quot;Delta_E&quot;, &quot;E_Ts&quot;, &quot;E_KRA&quot;, &quot;A-site&quot;, &quot;B-site&quot;, &quot;X-site&quot;])
-X = X.dropna()
-y = y[X.index]
+<span class="c1"># 1. Load your data</span>
+<span class="n">data</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="s2">&quot;manuel_data.csv&quot;</span><span class="p">)</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="s2">&quot;E_a&quot;</span><span class="p">]</span>
+<span class="n">X</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">&quot;E_a&quot;</span><span class="p">,</span> <span class="s2">&quot;Name&quot;</span><span class="p">,</span> <span class="s2">&quot;Delta_E&quot;</span><span class="p">,</span> <span class="s2">&quot;E_Ts&quot;</span><span class="p">,</span> <span class="s2">&quot;E_KRA&quot;</span><span class="p">,</span> <span class="s2">&quot;A-site&quot;</span><span class="p">,</span> <span class="s2">&quot;B-site&quot;</span><span class="p">,</span> <span class="s2">&quot;X-site&quot;</span><span class="p">])</span>
+<span class="n">X</span> <span class="o">=</span> <span class="n">X</span><span class="o">.</span><span class="n">dropna</span><span class="p">()</span>
+<span class="n">y</span> <span class="o">=</span> <span class="n">y</span><span class="p">[</span><span class="n">X</span><span class="o">.</span><span class="n">index</span><span class="p">]</span>
 
-# 2. Define configuration as a dictionary
-config = {
-    &quot;depth&quot;: 3,
-    &quot;max_D&quot;: 2,
-    &quot;op_rules&quot;: [{&quot;op&quot;: &quot;add&quot;}, {&quot;op&quot;: &quot;sub&quot;}, {&quot;op&quot;: &quot;mul&quot;}, {&quot;op&quot;: &quot;div&quot;}, {&quot;op&quot;: &quot;sqrt&quot;}],
-    &quot;search_strategy&quot;: &quot;sisso++&quot;,
-    &quot;selection_method&quot;: &quot;cv&quot;,
-    &quot;cv&quot;: 5,
-    &quot;random_state&quot;: 42
-}
+<span class="c1"># 2. Define configuration as a dictionary</span>
+<span class="n">config</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">&quot;depth&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span>
+    <span class="s2">&quot;max_D&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+    <span class="s2">&quot;op_rules&quot;</span><span class="p">:</span> <span class="p">[{</span><span class="s2">&quot;op&quot;</span><span class="p">:</span> <span class="s2">&quot;add&quot;</span><span class="p">},</span> <span class="p">{</span><span class="s2">&quot;op&quot;</span><span class="p">:</span> <span class="s2">&quot;sub&quot;</span><span class="p">},</span> <span class="p">{</span><span class="s2">&quot;op&quot;</span><span class="p">:</span> <span class="s2">&quot;mul&quot;</span><span class="p">},</span> <span class="p">{</span><span class="s2">&quot;op&quot;</span><span class="p">:</span> <span class="s2">&quot;div&quot;</span><span class="p">},</span> <span class="p">{</span><span class="s2">&quot;op&quot;</span><span class="p">:</span> <span class="s2">&quot;sqrt&quot;</span><span class="p">}],</span>
+    <span class="s2">&quot;search_strategy&quot;</span><span class="p">:</span> <span class="s2">&quot;sisso++&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;selection_method&quot;</span><span class="p">:</span> <span class="s2">&quot;cv&quot;</span><span class="p">,</span>
+    <span class="s2">&quot;cv&quot;</span><span class="p">:</span> <span class="mi">5</span><span class="p">,</span>
+    <span class="s2">&quot;random_state&quot;</span><span class="p">:</span> <span class="mi">42</span>
+<span class="p">}</span>
 
-# 3. Initialize and fit the model
-model = DiscoverRegressor(**config)
-model.fit(X, y)
+<span class="c1"># 3. Initialize and fit the model</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">DiscoverRegressor</span><span class="p">(</span><span class="o">**</span><span class="n">config</span><span class="p">)</span>
+<span class="n">model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
 
-# 4. Print the best model's formula
-print(&quot;--- Best Model Found ---&quot;)
-model.best_model_summary()
+<span class="c1"># 4. Print the best model&#39;s formula</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;--- Best Model Found ---&quot;</span><span class="p">)</span>
+<span class="n">model</span><span class="o">.</span><span class="n">best_model_summary</span><span class="p">()</span>
 
-# 5. Make predictions
-predictions = model.predict(X)
-print(f&quot;\nPredictions on training data: {predictions[:5]}&quot;)
+<span class="c1"># 5. Make predictions</span>
+<span class="n">predictions</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Predictions on training data: </span><span class="si">{</span><span class="n">predictions</span><span class="p">[:</span><span class="mi">5</span><span class="p">]</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
 
-# 6. Generate and save plots
-print(&quot;\nGenerating plots...&quot;)
-fig_parity = model.plot_parity(X, y, save_path=&quot;parity_plot.png&quot;)
-fig_cv = model.plot_cv_results(save_path=&quot;cv_scores.png&quot;)
-print(&quot;Plots saved to parity_plot.png and cv_scores.png&quot;)
-</code></pre>
-<h3 id="how-to-enable-gpu-acceleration">How to Enable GPU Acceleration</h3>
+<span class="c1"># 6. Generate and save plots</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;</span><span class="se">\n</span><span class="s2">Generating plots...&quot;</span><span class="p">)</span>
+<span class="n">fig_parity</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">plot_parity</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">save_path</span><span class="o">=</span><span class="s2">&quot;parity_plot.png&quot;</span><span class="p">)</span>
+<span class="n">fig_cv</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">plot_cv_results</span><span class="p">(</span><span class="n">save_path</span><span class="o">=</span><span class="s2">&quot;cv_scores.png&quot;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">&quot;Plots saved to parity_plot.png and cv_scores.png&quot;</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="how-to-enable-gpu-acceleration">How to Enable GPU Acceleration<a class="headerlink" href="#how-to-enable-gpu-acceleration" title="Permanent link">&para;</a></h3>
 <p>If you have a compatible GPU and have installed the necessary libraries (<code>cupy</code> for NVIDIA, <code>pytorch</code> for Apple Silicon), you can significantly speed up the workflow.</p>
 <p>In your <code>config.json</code> or Python dictionary, set the <code>device</code> parameter:</p>
-<p><strong>For NVIDIA CUDA:</strong></p>
-<pre><code class="language-json">{
-  &quot;device&quot;: &quot;cuda&quot;,
-  &quot;gpu_id&quot;: 0,
-  &quot;use_single_precision&quot;: true
-}
-</code></pre>
-<ul>
-<li><code>gpu_id</code>: The index of the GPU to use (if you have multiple).</li>
-<li><code>use_single_precision</code>: Set to <code>true</code> to use <code>float32</code>, which is often much faster on GPUs and typically sufficient for symbolic regression tasks.</li>
-</ul>
-<p><strong>For Apple Silicon (MPS):</strong></p>
-<pre><code class="language-json">{
-  &quot;device&quot;: &quot;mps&quot;
-}
-</code></pre>
-<ul>
-<li>Note: MPS acceleration currently works with <code>float32</code>. DISCOVER will automatically switch to single precision if you select the <code>mps</code> device.</li>
-</ul>
+<p><strong>For NVIDIA CUDA:</strong>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;device&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;cuda&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;gpu_id&quot;</span><span class="p">:</span><span class="w"> </span><span class="mi">0</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;use_single_precision&quot;</span><span class="p">:</span><span class="w"> </span><span class="kc">true</span>
+<span class="p">}</span>
+</code></pre></div>
+-   <code>gpu_id</code>: The index of the GPU to use (if you have multiple).
+-   <code>use_single_precision</code>: Set to <code>true</code> to use <code>float32</code>, which is often much faster on GPUs and typically sufficient for symbolic regression tasks.</p>
+<p><strong>For Apple Silicon (MPS):</strong>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;device&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;mps&quot;</span>
+<span class="p">}</span>
+</code></pre></div>
+-   Note: MPS acceleration currently works with <code>float32</code>. DISCOVER will automatically switch to single precision if you select the <code>mps</code> device.</p>
 <p>DISCOVER will automatically use the GPU for feature generation, SIS screening, and L2 regression. If a specific operation is not GPU-supported (e.g., Huber loss), it will seamlessly fall back to the CPU for that step.</p>
-<h3 id="how-to-configure-the-feature-space">How to Configure the Feature Space</h3>
+<h3 id="how-to-configure-the-feature-space">How to Configure the Feature Space<a class="headerlink" href="#how-to-configure-the-feature-space" title="Permanent link">&para;</a></h3>
 <p>You have fine-grained control over the features DISCOVER generates.</p>
 <p><strong>1. Customizing Operators:</strong>
 The <code>op_rules</code> list determines which mathematical operations are used. The default set is comprehensive, but you can tailor it. For example, to only allow simple arithmetic and powers:</p>
-<pre><code class="language-json">&quot;op_rules&quot;: [
-  {&quot;op&quot;: &quot;add&quot;}, {&quot;op&quot;: &quot;sub&quot;}, {&quot;op&quot;: &quot;mul&quot;}, {&quot;op&quot;: &quot;div&quot;},
-  {&quot;op&quot;: &quot;sq&quot;}, {&quot;op&quot;: &quot;cb&quot;}, {&quot;op&quot;: &quot;inv&quot;}
-]
-</code></pre>
-<p>See <code>discover/features.py</code> for a full list of built-in operators, including <code>abs_diff</code> and <code>harmonic_mean</code>.</p>
+<p><div class="highlight"><pre><span></span><code><span class="nt">&quot;op_rules&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">  </span><span class="p">{</span><span class="nt">&quot;op&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;add&quot;</span><span class="p">},</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;op&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sub&quot;</span><span class="p">},</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;op&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;mul&quot;</span><span class="p">},</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;op&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;div&quot;</span><span class="p">},</span>
+<span class="w">  </span><span class="p">{</span><span class="nt">&quot;op&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;sq&quot;</span><span class="p">},</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;op&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;cb&quot;</span><span class="p">},</span><span class="w"> </span><span class="p">{</span><span class="nt">&quot;op&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;inv&quot;</span><span class="p">}</span>
+<span class="p">]</span>
+</code></pre></div>
+See <code>discover/features.py</code> for a full list of built-in operators, including <code>abs_diff</code> and <code>harmonic_mean</code>.</p>
 <p><strong>2. Excluding Features from Operators:</strong>
 You can prevent certain primary features from being used in specific operations. This is useful for enforcing physical constraints. For example, to prevent <code>log</code> from being applied to a feature named <code>temperature</code>:</p>
-<pre><code class="language-json">&quot;op_rules&quot;: [
-  {&quot;op&quot;: &quot;log&quot;, &quot;exclude_features&quot;: [&quot;temperature&quot;]},
-  {&quot;op&quot;: &quot;add&quot;}
-]
-</code></pre>
+<div class="highlight"><pre><span></span><code><span class="nt">&quot;op_rules&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">  </span><span class="p">{</span><span class="nt">&quot;op&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;log&quot;</span><span class="p">,</span><span class="w"> </span><span class="nt">&quot;exclude_features&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;temperature&quot;</span><span class="p">]},</span>
+<span class="w">  </span><span class="p">{</span><span class="nt">&quot;op&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;add&quot;</span><span class="p">}</span>
+<span class="p">]</span>
+</code></pre></div>
 <p><strong>3. Interaction-Only Features:</strong>
 Set <code>"interaction_only": true</code> to prevent unary operators (like <code>sqrt</code>, <code>log</code>, <code>sq</code>) from being applied. This forces the model to find relationships based only on combinations of <em>different</em> primary features.</p>
-<h3 id="how-to-choose-a-search-strategy">How to Choose a Search Strategy</h3>
+<h3 id="how-to-choose-a-search-strategy">How to Choose a Search Strategy<a class="headerlink" href="#how-to-choose-a-search-strategy" title="Permanent link">&para;</a></h3>
 <p>The <code>search_strategy</code> parameter is one of the most important for balancing speed and the quality of the final model.</p>
 <table>
 <thead>
@@ -753,29 +749,29 @@ Set <code>"interaction_only": true</code> to prevent unary operators (like <code
 </tr>
 </tbody>
 </table>
-<h3 id="how-to-perform-classification">How to Perform Classification</h3>
+<h3 id="how-to-perform-classification">How to Perform Classification<a class="headerlink" href="#how-to-perform-classification" title="Permanent link">&para;</a></h3>
 <p>DISCOVER supports several classification tasks. To use one, simply change <code>task_type</code>.</p>
-<p><strong>1. Logistic Regression or SVM:</strong></p>
-<pre><code class="language-json">&quot;task_type&quot;: &quot;classification_logreg&quot;, // or &quot;classification_svm&quot;
-</code></pre>
-<p>The model will be a linear combination of descriptors fed into a logistic or SVM classifier. The goal is to find descriptors that create a linearly separable space.</p>
-<p><strong>2. Convex Hull Classification:</strong></p>
-<pre><code class="language-json">&quot;task_type&quot;: &quot;ch_classification&quot;
-</code></pre>
-<p>This is a unique geometric approach. The search algorithm tries to find a feature space where the convex hulls of the different classes have minimal overlap. This is powerful for problems where classes are known to occupy distinct domains in some property space.</p>
-<h3 id="how-to-use-unit-aware-feature-generation">How to Use Unit-Aware Feature Generation</h3>
+<p><strong>1. Logistic Regression or SVM:</strong>
+<div class="highlight"><pre><span></span><code><span class="nt">&quot;task_type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;classification_logreg&quot;</span><span class="p">,</span><span class="w"> </span><span class="c1">// or &quot;classification_svm&quot;</span>
+</code></pre></div>
+The model will be a linear combination of descriptors fed into a logistic or SVM classifier. The goal is to find descriptors that create a linearly separable space.</p>
+<p><strong>2. Convex Hull Classification:</strong>
+<div class="highlight"><pre><span></span><code><span class="nt">&quot;task_type&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ch_classification&quot;</span>
+</code></pre></div>
+This is a unique geometric approach. The search algorithm tries to find a feature space where the convex hulls of the different classes have minimal overlap. This is powerful for problems where classes are known to occupy distinct domains in some property space.</p>
+<h3 id="how-to-use-unit-aware-feature-generation">How to Use Unit-Aware Feature Generation<a class="headerlink" href="#how-to-use-unit-aware-feature-generation" title="Permanent link">&para;</a></h3>
 <p>To prevent physically nonsensical features (e.g., adding a length to a temperature), you can provide units for your primary features. This requires the <code>pint</code> library.</p>
 <p>In your configuration, create a <code>primary_units</code> dictionary:</p>
-<pre><code class="language-json">&quot;primary_units&quot;: {
-  &quot;E_a&quot;: &quot;electron_volt&quot;,
-  &quot;A_valence&quot;: &quot;dimensionless&quot;,
-  &quot;R_A&quot;: &quot;angstrom&quot;,
-  &quot;R_B&quot;: &quot;angstrom&quot;,
-  &quot;alpha&quot;: &quot;degree&quot;,
-  &quot;k64_m&quot;: &quot;dimensionless&quot;
-}
-</code></pre>
-<p>DISCOVER will now only generate features that are dimensionally consistent. For example, <code>R_A + R_B</code> is allowed, but <code>R_A + alpha</code> will be discarded. Functions like <code>log</code> or <code>exp</code> will only be applied to dimensionless features.</p>
+<p><div class="highlight"><pre><span></span><code><span class="nt">&quot;primary_units&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nt">&quot;E_a&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;electron_volt&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;A_valence&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;dimensionless&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;R_A&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;angstrom&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;R_B&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;angstrom&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;alpha&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;degree&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="nt">&quot;k64_m&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;dimensionless&quot;</span>
+<span class="p">}</span>
+</code></pre></div>
+DISCOVER will now only generate features that are dimensionally consistent. For example, <code>R_A + R_B</code> is allowed, but <code>R_A + alpha</code> will be discarded. Functions like <code>log</code> or <code>exp</code> will only be applied to dimensionless features.</p>
 
 
 
