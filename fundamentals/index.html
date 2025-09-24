@@ -1137,22 +1137,30 @@
 <p><strong>Dimension 2:</strong> For each of the top models from step 1, it tries adding every other available feature.</p>
 </li>
 <li>
-<p><strong>The QR Update:</strong> The key to its efficiency is using <strong>QR decomposition</strong>.  </p>
+<p><strong>The QR Update:</strong> The key to its efficiency is using <strong>QR decomposition</strong>.</p>
 </li>
 </ol>
-<p>If we have the decomposition for a feature set, written as <span class="arithmatex">\(X_D = Q_D R_D\)</span>, the Residual Sum of Squares (RSS) is simple to calculate:</p>
+<p>Suppose we have a feature set with decomposition:</p>
+<p>$$
+   X_D = Q_D R_D
+   $$</p>
+<p>Then the Residual Sum of Squares (RSS) can be computed as:</p>
 <p>$$
    \text{RSS}_D = |\mathbf{y}|_2^2 - |Q_D^T \mathbf{y}|_2^2
    $$</p>
-<p>To evaluate a new model with an added feature, which we'll call <span class="arithmatex">\(\mathbf{x}_{\text{new}}\)</span>, the algorithm doesn't need to refit the entire model. Instead, it calculates the component of <span class="arithmatex">\(\mathbf{x}_{\text{new}}\)</span> that is orthogonal to the space already spanned by the existing features <span class="arithmatex">\(Q_D\)</span>:</p>
+<p>Now, to evaluate a new model that adds a feature, denoted as:</p>
+<p>$$
+   \mathbf{x}_{\text{new}}
+   $$</p>
+<p>we compute the component of <span class="arithmatex">\(\mathbf{x}_{\text{new}}\)</span> orthogonal to the space spanned by the existing features <span class="arithmatex">\(Q_D\)</span>:</p>
 <p>$$
    \mathbf{w}<em>{\text{new}} = \mathbf{x}</em>{\text{new}} - Q_D Q_D^T \mathbf{x}_{\text{new}}
    $$</p>
-<p>The resulting improvement (the reduction in RSS) is then found directly with this formula:</p>
+<p>The corresponding improvement in RSS (reduction) is then:</p>
 <p>$$
    \Delta \text{RSS} = \frac{(\mathbf{r}<em>D^T \mathbf{w}</em>{\text{new}})^2}{|\mathbf{w}_{\text{new}}|_2^2}
    $$</p>
-<p>Here, the term <span class="arithmatex">\(\mathbf{r}_{D}\)</span> represents the residual from the original model.</p>
+<p>Here, <span class="arithmatex">\(\mathbf{r}_D\)</span> represents the residual from the original model.</p>
 <ol>
 <li>A new beam of top <span class="arithmatex">\(N_{\text{beam}}\)</span> 2D models is created, and the process repeats up to the maximum desired dimension, <span class="arithmatex">\(D_{\text{max}}\)</span>.</li>
 </ol>
