@@ -14,83 +14,197 @@ where $\|\beta\|_0$ counts the number of nonzero elements in the coefficient vec
 The following methods are implemented in `search.py` to select the optimal subset of $D$ features from the screened candidates.
 
 ### Brute-Force Search (`_find_best_models_brute_force`)
+
 #### Methodology
-This is the most straightforward and exhaustive approach. It systematically evaluates every possible combination of $D$ features from the pool of $M$ candidates.
-1.  For a given dimension $D$, generate all $\binom{M}{D}$ unique combinations of features.
-2.  For each combination, form a feature matrix $X_D$.
-3.  Fit an Ordinary Least Squares (OLS) regression model to find the coefficients $\beta$.
-    $$
-    \beta = X_D^\dagger \mathbf{y} \quad \text{(pseudo-inverse in case $X_D$ is rank-deficient)}
-    $$
-4.  Calculate the error of this model, typically the Root Mean Squared Error (RMSE).
-    $$
-    \text{RMSE} = \sqrt{\frac{1}{n} \sum_{i=1}^{n} (y_i - \hat{y}_i)^2} = \sqrt{\frac{1}{n} \|\mathbf{y} - X_D\beta\|_2^2}
-    $$
-5.  The combination that yields the minimum RMSE is selected as the best model for dimension $D$.
+
+This is the most straightforward and exhaustive approach. It systematically evaluates every possible combination of \( D \) features from the pool of \( M \) candidates.
+
+1. **Generate feature combinations**
+
+   For a given dimension \( D \), generate all \( \binom{M}{D} \) unique combinations of features.
+
+2. **Form feature matrix**
+
+   For each combination, form a feature matrix \( X_D \).
+
+3. **Fit an Ordinary Least Squares (OLS) model**
+
+   Solve for the coefficients \( \beta \):
+
+   $$
+   \beta = X_D^\dagger \mathbf{y}
+   $$
+
+   *(pseudo-inverse is used if \( X_D \) is rank-deficient)*
+
+4. **Compute model error**
+
+   Calculate the Root Mean Squared Error (RMSE):
+
+   $$
+   \text{RMSE} = \sqrt{\frac{1}{n} \sum_{i=1}^{n} (y_i - \hat{y}_i)^2}
+   $$
+
+   or equivalently,
+
+   $$
+   \text{RMSE} = \sqrt{\frac{1}{n} \|\mathbf{y} - X_D\beta\|_2^2}
+   $$
+
+5. **Select the best model**
+
+   The combination that yields the minimum RMSE is selected as the best model for dimension \( D \).
 
 #### Application in Symbolic Regression
-This method guarantees finding the globally optimal set of $D$ symbolic features from the selected screened pool. However, its computational cost, $O(\binom{M}{D})$, makes it practical only for very small $M$ and $D$.
+
+This method guarantees finding the globally optimal set of \( D \) symbolic features from the screened pool.  
+However, its computational cost \( O\!\left(\binom{M}{D}\right) \) makes it practical only for small \( M \) and \( D \).
+
+---
 
 ### Greedy Search (`_find_best_models_greedy`)
+
 #### Methodology
-This is a forward selection algorithm that builds the model one feature at a time. It is computationally efficient, but may not find the global optimum.
-1.  **Dimension 1:** Find the single best feature $\Phi_1^*$ by fitting $M$ separate 1D models. The feature with the lowest error is selected.
-    $$
-    \Phi_1^* = \underset{\Phi_j \in \Phi}{\text{argmin}} \left( \min_{\beta_0, \beta_j} \|\mathbf{y} - (\beta_0 + \beta_j \Phi_j)\|_2^2 \right)
-    $$
-2.  **Dimension 2:** Keep $\Phi_1^*$ fixed. Search through all remaining $M-1$ features to find the second feature $\Phi_2^*$ that, when combined with $\Phi_1^*$, yields the best 2D model.
-    $$
-    \Phi_2^* = \underset{\Phi_j \in \Phi \setminus \{\Phi_1^*\}}{\text{argmin}} \left( \min_{\beta_0, \beta_1, \beta_j} \|\mathbf{y} - (\beta_0 + \beta_1 \Phi_1^* + \beta_j \Phi_j)\|_2^2 \right)
-    $$
-3.  **Dimension D:** Continue this process, adding one feature at each step that provides the greatest improvement to the existing model, until a $D$-dimensional model is constructed.
+
+This is a forward selection algorithm that builds the model one feature at a time. It is computationally efficient but may not find the global optimum.
+
+1. **Dimension 1**
+
+   Find the single best feature \( \Phi_1^* \) by fitting \( M \) separate 1D models.  
+   The feature with the lowest error is selected:
+
+   $$
+   \Phi_1^* = \underset{\Phi_j \in \Phi}{\text{argmin}} 
+   \left( \min_{\beta_0, \beta_j} 
+   \|\mathbf{y} - (\beta_0 + \beta_j \Phi_j)\|_2^2 \right)
+   $$
+
+2. **Dimension 2**
+
+   Keep \( \Phi_1^* \) fixed.  
+   Search through all remaining \( M - 1 \) features to find the second feature \( \Phi_2^* \) that, when combined with \( \Phi_1^* \), yields the best 2D model:
+
+   $$
+   \Phi_2^* = \underset{\Phi_j \in \Phi \setminus \{\Phi_1^*\}}{\text{argmin}}
+   \left( \min_{\beta_0, \beta_1, \beta_j}
+   \|\mathbf{y} - (\beta_0 + \beta_1 \Phi_1^* + \beta_j \Phi_j)\|_2^2 \right)
+   $$
+
+3. **Dimension D**
+
+   Continue this process, adding one feature at each step that provides the greatest improvement to the existing model,  
+   until a \( D \)-dimensional model is constructed.
+
 
 #### Application in Symbolic Regression
 The greedy search quickly identifies a good, but not necessarily optimal, combination of symbolic features. In each step, it selects the symbolic expression that best explains the variance *not already explained* by the previously selected features.
 
 ### Orthogonal Matching Pursuit (OMP) (`_find_best_models_omp`)
 #### Methodology
+
 OMP is a more robust version of the greedy algorithm. Instead of just adding the next best feature, it recalculates the coefficients for all selected features at each step.
-1.  Initialize the residual $\mathbf{r}_0 = \mathbf{y}$ and the selected feature set $\mathcal{S}_0 = \emptyset$.
-2.  For $k=1, \dots, D$:
-    1.  Find the feature $\Phi_k^*$ from the remaining pool that is most correlated with the current residual $\mathbf{r}_{k-1}$.
-        $$
-        \Phi_k^* = \underset{\Phi_j \notin \mathcal{S}_{k-1}}{\text{argmax}} \left| \langle \mathbf{r}_{k-1}, \Phi_j \rangle \right|
-        $$
-    2.  Add the selected feature to the active set: $\mathcal{S}_k = \mathcal{S}_{k-1} \cup \{\Phi_k^*\}$.
-    3.  Solve a least-squares problem to find the new coefficients $\beta_k$ using all features currently in the active set $\mathcal{S}_k$.
-        $$
-        \beta_k = \Phi_{\mathcal{S}_k}^\dagger \mathbf{y} \quad \text{(least-squares solution / pseudo-inverse)}
-        $$
-    4.  Update the residual for the next iteration.
-        $$
-        \mathbf{r}_k = \mathbf{y} - \Phi_{\mathcal{S}_k} \beta_k
-        $$
+
+1. **Initialize the residual and active set**
+
+   Initialize the residual:
+   $$
+   \mathbf{r}_0 = \mathbf{y}
+   $$
+   and the selected feature set:
+   $$
+   \mathcal{S}_0 = \emptyset
+   $$
+
+2. **Iterative selection (for** \( k = 1, \dots, D \) **)**
+
+   1. **Find the most correlated feature**
+
+      Select the feature \( \Phi_k^* \) from the remaining pool that is most correlated with the current residual \( \mathbf{r}_{k-1} \):
+
+      $$
+      \Phi_k^* = \underset{\Phi_j \notin \mathcal{S}_{k-1}}{\text{argmax}} \left| \langle \mathbf{r}_{k-1}, \Phi_j \rangle \right|
+      $$
+
+   2. **Add the selected feature**
+
+      Update the active set:
+      $$
+      \mathcal{S}_k = \mathcal{S}_{k-1} \cup \{\Phi_k^*\}
+      $$
+
+   3. **Compute new coefficients**
+
+      Solve a least-squares problem using all features currently in the active set \( \mathcal{S}_k \):
+
+      $$
+      \beta_k = \Phi_{\mathcal{S}_k}^\dagger \mathbf{y}
+      $$
+
+      *(least-squares solution / pseudo-inverse)*
+
+   4. **Update the residual**
+
+      $$
+      \mathbf{r}_k = \mathbf{y} - \Phi_{\mathcal{S}_k} \beta_k
+      $$
 
 #### Application in Symbolic Regression
 OMP provides a more stable path to a solution than a simple greedy search. By re-fitting the entire model at each step, it better accounts for correlations between the selected symbolic features, often leading to a more physically meaningful final equation.
 
 ### SISSO++ (Breadth-First QR Search) (`_find_best_models_sisso_pp`)
+
 #### Methodology
-This is a highly efficient breadth-first search algorithm that avoids the combinatorial explosion of brute-force by using linear algebra updates. It keeps a "beam" of the best-performing models at each dimension.
-1.  **Dimension 1:** Evaluate all 1D models and retain the top $N_{\text{beam}}$ models with the lowest RSS.
-2.  **Dimension 2:** For each of the $N_{\text{beam}}$ models from D=1, try adding every other available feature.
-3.  **The QR Update:** The key to its efficiency is using QR decomposition. If we have the decomposition for a feature set $X_D = Q_D R_D$, the RSS is easily calculated:
-    $$
-    \text{RSS}_D = \|\mathbf{y}\|_2^2 - \|Q_D^T \mathbf{y}\|_2^2
-    $$
-    To find the RSS for a new model with an added feature $\mathbf{x}_{\text{new}}$, we don't refit. Instead, we compute the component of $\mathbf{x}_{\text{new}}$ orthogonal to the space spanned by $Q_D$:
-    $$
-    \mathbf{w}_{\text{new}} = \mathbf{x}_{\text{new}} - Q_D Q_D^T \mathbf{x}_{\text{new}}
-    $$
-    The reduction in RSS is then calculated directly:
-    $$
-    \Delta \text{RSS} = \frac{(\mathbf{r}_D^T \mathbf{w}_{\text{new}})^2}{\|\mathbf{w}_{\text{new}}\|_2^2}
-    $$
-    where $\mathbf{r}_D = \mathbf{y} - Q_D Q_D^T \mathbf{y}$ is the residual.
-4.  A new beam of the top $N_{\text{beam}}$ 2D models is created, and the process repeats for $D=3, \dots, D_{\text{max}}$.
+
+This is a highly efficient breadth-first search algorithm that avoids the combinatorial explosion of brute-force by leveraging linear algebra updates.  
+It maintains a “beam” of the best-performing models at each dimension.
+
+1. **Dimension 1**
+
+   Evaluate all 1D models and retain the top \( N_{\text{beam}} \) models with the lowest residual sum of squares (RSS).
+
+2. **Dimension 2**
+
+   For each of the \( N_{\text{beam}} \) models from \( D = 1 \), try adding every other available feature.
+
+3. **The QR Update**
+
+   The key to its efficiency is using **QR decomposition**.  
+   If we have the decomposition for a feature set \( X_D = Q_D R_D \), the RSS is easily calculated:
+
+   $$
+   \text{RSS}_D = \|\mathbf{y}\|_2^2 - \|Q_D^T \mathbf{y}\|_2^2
+   $$
+
+   To find the RSS for a new model with an added feature \( \mathbf{x}_{\text{new}} \), we don’t refit.  
+   Instead, we compute the component of \( \mathbf{x}_{\text{new}} \) orthogonal to the space spanned by \( Q_D \):
+
+   $$
+   \mathbf{w}_{\text{new}} = \mathbf{x}_{\text{new}} - Q_D Q_D^T \mathbf{x}_{\text{new}}
+   $$
+
+   The reduction in RSS is then calculated directly:
+
+   $$
+   \Delta \text{RSS} = \frac{(\mathbf{r}_D^T \mathbf{w}_{\text{new}})^2}{\|\mathbf{w}_{\text{new}}\|_2^2}
+   $$
+
+   where the residual is defined as:
+
+   $$
+   \mathbf{r}_D = \mathbf{y} - Q_D Q_D^T \mathbf{y}
+   $$
+
+4. **Beam update**
+
+   A new beam of the top \( N_{\text{beam}} \) 2D models is created, and the process repeats for  
+   \( D = 3, \dots, D_{\text{max}} \).
 
 #### Application in Symbolic Regression
-SISSO++ explores a much wider range of feature combinations than a simple greedy search without incurring the cost of brute-force. It is highly effective at finding high-quality, low-dimensional symbolic models that might be missed by a purely sequential greedy approach.
+
+SISSO++ explores a much wider range of feature combinations than a simple greedy search, without incurring the cost of brute-force.  
+It is highly effective at finding high-quality, low-dimensional symbolic models that might be missed by a purely sequential approach.
+
+---
 
 ### Random Mutation Hill Climbing (RMHC) & Simulated Annealing (SA)
 #### Methodology

@@ -39,3 +39,6 @@ This implementation is designed for **ease of use, extensibility, and performanc
 
 - **Would you like to learn fundamentals?**
   - Read the **[Fundamentals](./fundamentals.md)** to learn how to add new features and operators.
+
+- **If you find this article useful, please consider it citing**
+  - DOI:
