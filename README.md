@@ -1,6 +1,7 @@
-
-
 # DISCOVER: A Python Implementation of Data-Informed Symbolic Combination of Operators for Variable Equation Regression
+
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18401432.svg)](https://doi.org/10.5281/zenodo.18401432)
+[![CI](https://github.com/u-gajera/discover/actions/workflows/ci.yml/badge.svg)](https://github.com/u-gajera/discover/actions/workflows/ci.yml)
 
 <img src="src/discover_logo_1.png" alt="Logo" width="220" align="left" style="margin-right: 20px;"/>
 
