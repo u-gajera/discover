@@ -7,7 +7,9 @@ from discover.models import DiscoverRegressor
 @pytest.fixture
 def sample_data():
     """Loading the sample dataset."""
-    df = pd.read_csv('sample_dataset.csv')
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    csv_path = os.path.join(current_dir, 'sample_dataset.csv')
+    df = pd.read_csv(csv_path)
     X = df[['feature1', 'feature2', 'feature3']]
     y = df['property']
     return X, y
