@@ -51,7 +51,7 @@ DISCOVER is an open-source symbolic regression package designed for the guided d
 
 To support sparse model discovery, DISCOVER provides access to multiple sparsifying search strategies, including heuristic, optimization-based, and stochastic approaches such as Orthogonal Matching Pursuit (OMP) [@omp], Mixed-Integer Quadratic Programming (MIQP) [@miqp], and Simulated Annealing [@sa]. The software architecture is modular and Python-native, enabling straightforward integration with common scientific libraries. Computationally intensive operations such as feature generation and model evaluation are parallelized and executed on hardware accelerators when available. For large-scale studies, DISCOVER supports optional GPU acceleration via CUDA on NVIDIA GPUs and Metal Performance Shaders (MPS) on Apple Silicon devices, while maintaining efficient CPU-based execution for standard workloads. This hardware-aware design enables scalable symbolic regression workflows on both high-performance computing systems and local development environments.
 
-![Overview of the DISCOVER workflow, illustrating iterative feature generation, physics-informed screening, and sparse model selection.](discover_workflow.png){#fig:workflow width=6cm}
+![Overview of the DISCOVER workflow, illustrating iterative feature generation, physics-informed screening, and sparse model selection.](discover_workflow.png)
 
 ## Core Optimization Objective
 
