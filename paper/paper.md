@@ -26,7 +26,8 @@ affiliations:
  - name: Karlsruhe Institute of Technology (KIT), P.O. Box 3640, D-76021 Karlsruhe, Germany
    index: 4
 date: 27 January 2026
-bibliography: references.bib
+bibliography: paper.bib
+version: 1.0.0
 ---
 
 # Summary
