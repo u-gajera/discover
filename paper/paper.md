@@ -78,7 +78,7 @@ A core design goal of DISCOVER is to enable direct incorporation of domain exper
 
 # Research Impact Statement
 
-DISCOVER is intended for scientific applications where symbolic regression is used as a tool for model discovery rather than purely predictive performance. Typical use cases include identifying low-dimensional descriptors for physical or chemical properties, such as crystal structure stability [@gajera2022toward] or ion mobility in energy storage materials [@Sotoudeh2022]. The software is especially suited to computational physics, computational chemistry, and materials science workflows that benefit from Python integration and hardware-accelerated computation, spanning from battery cathode discovery [@ziheng49309] to accurate discrimination of magnetic structure [@PhysRevB.108.014403].
+DISCOVER is utilized in scientific applications where symbolic regression serves as a tool for robust model discovery, particularly in computational physics, computational chemistry, and materials science. The package has demonstrated direct scientific impact by enabling the discovery of physically meaningful descriptors in energy storage research. Specifically, DISCOVER was actively used as the primary symbolic regression engine to identify and analyze ionic mobility descriptors in battery materials [@Sotoudeh2026-gf]. By supporting Python integration, hardware-accelerated computation, and user-defined physical constraints, the software facilitates advanced materials design workflows, spanning from battery cathode evaluation [@ziheng49309] to the accurate discrimination of magnetic structures [@PhysRevB.108.014403].
 
 # Limitations
 
